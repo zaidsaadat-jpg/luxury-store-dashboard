@@ -94,8 +94,6 @@ COUNTRY_WEIGHTS = {
 
 # ============================================================
 # Five-level drill-down structure per driver
-# L1: Driver → L2: Activity type → L3: Country
-# → L4: Area of activity → L5: Specific item
 # ============================================================
 DRIVER_STRUCTURE = {
     "Renewable electricity transition": {
