@@ -1,55 +1,44 @@
 """
 Modeled assumptions for the first-draft dashboard.
 ALL VALUES ARE TIER 3 ESTIMATES FROM PUBLIC BENCHMARKS.
-Replace this module with CSV loaders when store-level data is available.
 """
 
 MARKETS = ["Hong Kong", "Singapore", "Korea", "China"]
 
-STORE_COUNTS = {
-    "Hong Kong": 8, "Singapore": 3, "Korea": 8, "China": 18,
-}
-
+STORE_COUNTS = {"Hong Kong": 8, "Singapore": 3, "Korea": 8, "China": 18}
 AVG_GIA_M2 = 600
-
-GRID_FACTORS = {
-    "Hong Kong": 0.79, "Singapore": 0.50, "Korea": 0.52, "China": 0.53,
-}
-
+GRID_FACTORS = {"Hong Kong": 0.79, "Singapore": 0.50, "Korea": 0.52, "China": 0.53}
 ENERGY_INTENSITY = 250
 REFRIGERANT_KG_PER_STORE = 2.5
 REFRIGERANT_GWP = 1430
-
 FITOUT_INTENSITY = 850
 RENOVATION_CYCLE = 5
-
 SEASONAL_INTENSITY = 40
 SELLING_AREA_RATIO = 0.70
-
 FITOUT_WASTE_INTENSITY = 35
 MIXED_WASTE_EF_T_PER_TONNE = 0.35
 DIVERSION_RATE = 0.60
 
-DESIGN_FOR_DISASSEMBLY = {
-    "Hong Kong": 0.35, "Singapore": 0.35, "Korea": 0.30, "China": 0.25,
-}
-FIXTURE_REUSE = {
-    "Hong Kong": 0.20, "Singapore": 0.20, "Korea": 0.15, "China": 0.15,
-}
-VM_REUSE = {
-    "Hong Kong": 0.40, "Singapore": 0.40, "Korea": 0.40, "China": 0.55,
-}
-RECYCLED_CONTENT = {
-    "Hong Kong": 0.15, "Singapore": 0.15, "Korea": 0.12, "China": 0.10,
-}
+DESIGN_FOR_DISASSEMBLY = {"Hong Kong": 0.35, "Singapore": 0.35, "Korea": 0.30, "China": 0.25}
+FIXTURE_REUSE = {"Hong Kong": 0.20, "Singapore": 0.20, "Korea": 0.15, "China": 0.15}
+VM_REUSE = {"Hong Kong": 0.40, "Singapore": 0.40, "Korea": 0.40, "China": 0.55}
+RECYCLED_CONTENT = {"Hong Kong": 0.15, "Singapore": 0.15, "Korea": 0.12, "China": 0.10}
 
 # ============================================================
-# Trajectory — baseline 2021, target 2035, long-term 2040
+# Trajectory
 # ============================================================
 BASELINE_YEAR = 2021
 TARGET_YEAR = 2035
 LONG_TERM_YEAR = 2040
 BASELINE_TOTAL_TCO2E = 10000.0
+
+# Planned trajectory — piecewise linear between anchors
+PLAN_TRAJECTORY = {
+    2021: 10000.0,
+    2025: 7500.0,
+    2030: 4000.0,
+    2035: 2000.0,
+}
 
 # ============================================================
 # Annual reductions by initiative (tCO2e saved in that year)
@@ -80,22 +69,38 @@ INITIATIVES = {
         2023: 15, 2024: 20, 2025: 25, 2026: 25, 2027: 25, 2028: 20,
         2029: 20, 2030: 15,
     },
+    "Logistics optimization": {
+        2024: 15, 2025: 20, 2026: 25, 2027: 30, 2028: 30,
+        2029: 30, 2030: 30, 2031: 25, 2032: 25, 2033: 20, 2034: 20, 2035: 20,
+    },
+    "Packaging circularity": {
+        2023: 10, 2024: 15, 2025: 20, 2026: 25, 2027: 25,
+        2028: 25, 2029: 25, 2030: 25, 2031: 20, 2032: 20, 2033: 20, 2034: 20, 2035: 20,
+    },
+    "Modular & adaptable design": {
+        2024: 10, 2025: 20, 2026: 30, 2027: 35, 2028: 40,
+        2029: 40, 2030: 40, 2031: 35, 2032: 35, 2033: 30, 2034: 30, 2035: 30,
+    },
+    "Asset longevity & retention": {
+        2022: 5, 2023: 10, 2024: 15, 2025: 20, 2026: 25,
+        2027: 30, 2028: 30, 2029: 30, 2030: 30, 2031: 25, 2032: 25, 2033: 20, 2034: 20, 2035: 20,
+    },
 }
 
-# ============================================================
-# Plan trajectory — planned absolute emissions by anchor year.
-# Separate from the initiative-driven trajectory so variance
-# against plan can be computed. Missing years are interpolated
-# linearly in calc.py.
-# ============================================================
-PLAN_TRAJECTORY = {
-    2021: 10000.0,
-    2025: 8600.0,
-    2030: 5000.0,
-    2035: 3000.0,
+# Scope categorization for each driver
+DRIVER_SCOPES = {
+    "Renewable electricity transition": "Scope 2",
+    "Energy efficiency (LED/HVAC)": "Scope 1+2",
+    "Refrigerant management": "Scope 1",
+    "Circular fit-out redesign": "Scope 3 · Cat 2",
+    "VM & seasonal reuse": "Scope 3",
+    "Waste diversion": "Scope 3 · Cat 5",
+    "Logistics optimization": "Scope 3 · Cat 4/9",
+    "Packaging circularity": "Scope 3 · Cat 5/12",
+    "Modular & adaptable design": "Scope 3 · Cat 2",
+    "Asset longevity & retention": "Scope 3 · Cat 2",
 }
 
-# Country allocation weights per driver
 COUNTRY_WEIGHTS = {
     "Renewable electricity transition": {"Hong Kong": 0.15, "Singapore": 0.08, "Korea": 0.20, "China": 0.57},
     "Energy efficiency (LED/HVAC)": {"Hong Kong": 0.20, "Singapore": 0.08, "Korea": 0.20, "China": 0.52},
@@ -103,14 +108,15 @@ COUNTRY_WEIGHTS = {
     "Circular fit-out redesign": {"Hong Kong": 0.20, "Singapore": 0.10, "Korea": 0.22, "China": 0.48},
     "VM & seasonal reuse": {"Hong Kong": 0.18, "Singapore": 0.08, "Korea": 0.20, "China": 0.54},
     "Waste diversion": {"Hong Kong": 0.20, "Singapore": 0.08, "Korea": 0.22, "China": 0.50},
+    "Logistics optimization": {"Hong Kong": 0.18, "Singapore": 0.10, "Korea": 0.22, "China": 0.50},
+    "Packaging circularity": {"Hong Kong": 0.20, "Singapore": 0.10, "Korea": 0.22, "China": 0.48},
+    "Modular & adaptable design": {"Hong Kong": 0.20, "Singapore": 0.10, "Korea": 0.22, "China": 0.48},
+    "Asset longevity & retention": {"Hong Kong": 0.20, "Singapore": 0.10, "Korea": 0.22, "China": 0.48},
 }
 
-# ============================================================
-# Five-level drill-down structure per driver
-# ============================================================
 DRIVER_STRUCTURE = {
     "Renewable electricity transition": {
-        "activity_type": "Scope 1+2 — Energy",
+        "activity_type": "Scope 2 — Purchased electricity",
         "areas": {
             "Boutique electricity": {
                 "items": ["Base lighting", "Display lighting", "HVAC", "AV/POS"],
@@ -120,7 +126,7 @@ DRIVER_STRUCTURE = {
         "area_weights": {"Boutique electricity": 1.0},
     },
     "Energy efficiency (LED/HVAC)": {
-        "activity_type": "Scope 1+2 — Energy",
+        "activity_type": "Scope 1+2 — Energy efficiency",
         "areas": {
             "HVAC": {
                 "items": ["Chillers", "AHUs", "Controls"],
@@ -144,7 +150,7 @@ DRIVER_STRUCTURE = {
         "area_weights": {"Refrigeration": 1.0},
     },
     "Circular fit-out redesign": {
-        "activity_type": "Scope 3 Cat 2 — Capital goods",
+        "activity_type": "Scope 3 · Cat 2 — Capital goods",
         "areas": {
             "Millwork & joinery": {
                 "items": ["Wall panels", "Cash wraps", "Built-in shelving"],
@@ -198,7 +204,7 @@ DRIVER_STRUCTURE = {
         },
     },
     "Waste diversion": {
-        "activity_type": "Scope 3 Cat 5 — Waste",
+        "activity_type": "Scope 3 · Cat 5 — Waste",
         "areas": {
             "Fit-out waste": {
                 "items": ["Timber", "Metal", "Acrylic"],
@@ -215,11 +221,68 @@ DRIVER_STRUCTURE = {
         },
         "area_weights": {"Fit-out waste": 0.55, "VM waste": 0.25, "Packaging waste": 0.20},
     },
+    "Logistics optimization": {
+        "activity_type": "Scope 3 · Cat 4/9 — Transport",
+        "areas": {
+            "Inbound freight": {
+                "items": ["Sea freight", "Air freight", "Road"],
+                "weights": {"Sea freight": 0.55, "Air freight": 0.30, "Road": 0.15},
+            },
+            "Store-to-store transfers": {
+                "items": ["Fixtures", "VM props", "Product"],
+                "weights": {"Fixtures": 0.40, "VM props": 0.30, "Product": 0.30},
+            },
+            "Reverse logistics": {
+                "items": ["Returns processing", "Take-back haulage"],
+                "weights": {"Returns processing": 0.60, "Take-back haulage": 0.40},
+            },
+        },
+        "area_weights": {"Inbound freight": 0.45, "Store-to-store transfers": 0.30, "Reverse logistics": 0.25},
+    },
+    "Packaging circularity": {
+        "activity_type": "Scope 3 · Cat 5/12 — Packaging",
+        "areas": {
+            "Retail packaging": {
+                "items": ["Shopping bags", "Product boxes", "Tissue"],
+                "weights": {"Shopping bags": 0.50, "Product boxes": 0.30, "Tissue": 0.20},
+            },
+            "Delivery packaging": {
+                "items": ["E-commerce boxes", "Fillers", "Tape"],
+                "weights": {"E-commerce boxes": 0.55, "Fillers": 0.25, "Tape": 0.20},
+            },
+        },
+        "area_weights": {"Retail packaging": 0.60, "Delivery packaging": 0.40},
+    },
+    "Modular & adaptable design": {
+        "activity_type": "Scope 3 · Cat 2 — Capital goods",
+        "areas": {
+            "Modular fixtures": {
+                "items": ["Interchangeable panels", "Standard shelving modules", "Modular display tables"],
+                "weights": {"Interchangeable panels": 0.40, "Standard shelving modules": 0.35, "Modular display tables": 0.25},
+            },
+            "Demountable partitions": {
+                "items": ["Demountable walls", "Movable screens", "Flexible columns"],
+                "weights": {"Demountable walls": 0.50, "Movable screens": 0.30, "Flexible columns": 0.20},
+            },
+        },
+        "area_weights": {"Modular fixtures": 0.60, "Demountable partitions": 0.40},
+    },
+    "Asset longevity & retention": {
+        "activity_type": "Scope 3 · Cat 2 — Capital goods",
+        "areas": {
+            "Fixture life extension": {
+                "items": ["Refurbishment", "Reupholstery", "Repair"],
+                "weights": {"Refurbishment": 0.45, "Reupholstery": 0.30, "Repair": 0.25},
+            },
+            "Cross-store reuse": {
+                "items": ["Fixture transfers", "VM asset transfer"],
+                "weights": {"Fixture transfers": 0.60, "VM asset transfer": 0.40},
+            },
+        },
+        "area_weights": {"Fixture life extension": 0.55, "Cross-store reuse": 0.45},
+    },
 }
 
-# ============================================================
-# LCA stages — sum equals BASELINE_TOTAL_TCO2E (10,000)
-# ============================================================
 LCA_STAGES = {
     "Raw material extraction": 1200.0,
     "Manufacturing / production": 2500.0,
@@ -231,9 +294,6 @@ LCA_STAGES = {
     "End of life (waste, take-back)": 300.0,
 }
 
-# ============================================================
-# Opportunity matrices — (name, impact_tCO2e_by_2035, effort_1to5, status)
-# ============================================================
 FITOUT_OPPORTUNITIES = [
     ("Design for disassembly (screws, not glue)", 600, 4, "Opportunity"),
     ("Modular millwork design", 450, 3, "In progress"),
@@ -274,3 +334,5 @@ WASTE_OPPORTUNITIES = [
     ("Mannequin refurbishment scheme", 40, 2, "Opportunity"),
     ("Local recycling partner network", 30, 2, "In progress"),
 ]
+
+MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
