@@ -9,7 +9,7 @@ from utils.constants import (
 
 
 # ============================================================
-# Static footprint helpers (unchanged)
+# Static footprint helpers
 # ============================================================
 def calc_floor_area():
     return {m: STORE_COUNTS[m] * AVG_GIA_M2 for m in MARKETS}
