@@ -13,31 +13,87 @@ from utils import calc
 from utils import drilldown as DD
 
 st.set_page_config(
-    page_title="Luxury Store CO2 Dashboard (Draft)",
-    page_icon="🌿",
+    page_title="Luxury Store CO₂ Reduction Dashboard",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# ---------------- Sidebar ----------------
-st.sidebar.title("Filters & Context")
-st.sidebar.caption("Draft dashboard · Tier 3 modeled estimates only")
-market_filter = st.sidebar.multiselect("Markets in scope", options=C.MARKETS, default=C.MARKETS)
-st.sidebar.divider()
-st.sidebar.markdown(
-    f"**Baseline framework:** 1.5°C-aligned retail pathway\n\n"
-    f"- Base year: {C.BASELINE_YEAR}\n"
-    f"- −50% by 2030\n"
-    f"- −70% by {C.TARGET_YEAR}\n"
-    f"- −90% by {C.LONG_TERM_YEAR}"
-)
-st.sidebar.divider()
-st.sidebar.caption(
-    "⚠️ All data is modeled from public benchmarks. "
-    "Replace with store-level Tier 1–2 data before any external use."
+# ---------------- Palette ----------------
+P = {
+    "ink": "#1F1F1F",
+    "gold": "#B08D57",
+    "grey": "#8A8A8A",
+    "green": "#2E4A3A",
+    "oxblood": "#6B2C2C",
+    "grid": "#E8E5E0",
+    "paper": "#FAF8F4",
+}
+CHART_COLORS = [P["ink"], P["gold"], P["grey"], P["green"], P["oxblood"], "#A67C3D", "#4A4A4A"]
+
+st.markdown(
+    """
+    <style>
+    html, body, [class*="css"] { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
+    h1, h2, h3, h4 { font-weight: 400; letter-spacing: 0.01em; color: #1F1F1F; }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
-# ---------------- Static current-year data ----------------
+
+# ---------------- Helpers ----------------
+def _selected_points(event):
+    if event is None:
+        return []
+    try:
+        sel = event["selection"] if "selection" in event else {}
+        pts = sel.get("points", []) if hasattr(sel, "get") else sel["points"]
+        return list(pts or [])
+    except Exception:
+        return []
+
+
+def _clicked(event, fallback=None):
+    pts = _selected_points(event)
+    if not pts:
+        return fallback
+    p = pts[0]
+    for key in ("label", "x"):
+        if key in p and p[key] is not None:
+            return p[key]
+    return fallback
+
+
+def _safe_plotly(fig, key):
+    try:
+        return st.plotly_chart(
+            fig, key=key, use_container_width=True,
+            on_select="rerun", selection_mode="points",
+        )
+    except TypeError:
+        st.plotly_chart(fig, key=key, use_container_width=True)
+        return None
+
+
+# ---------------- Sidebar ----------------
+with st.sidebar:
+    st.markdown("### Baseline")
+    st.caption("1.5°C-aligned retail pathway")
+    st.markdown(
+        f"- Base year: **{C.BASELINE_YEAR}**\n"
+        f"- −50% by **2030**\n"
+        f"- −70% by **{C.TARGET_YEAR}**\n"
+        f"- −90% by **{C.LONG_TERM_YEAR}**"
+    )
+    st.divider()
+    st.markdown("### Data status")
+    st.caption(
+        "All figures are Tier 3 modeled estimates from public benchmarks. "
+        "Not assurance-ready. Not for external reporting."
+    )
+
+
+# ---------------- Static footprint ----------------
 area = calc.calc_floor_area()
 elec = calc.calc_electricity_mwh()
 scope2 = calc.calc_scope2_location()
@@ -60,225 +116,341 @@ df = pd.DataFrame({
     "Category 5 waste (tCO2e)": [waste[m] for m in C.MARKETS],
     "Avoided emissions (tCO2e)": [avoided[m] for m in C.MARKETS],
 })
-df = df[df["Market"].isin(market_filter)].reset_index(drop=True)
 df["Scope 1+2 total"] = df["Scope 2 (tCO2e)"] + df["Scope 1 refrigerant (tCO2e)"]
 
-# ---------------- Header ----------------
-st.title("🌿 Luxury Store CO₂ Reduction Dashboard — First Draft")
-st.caption(
-    "Multi-market retail portfolio · Markets: Hong Kong · Singapore · Korea · China "
-    "· Baseline 2021 · Trajectory through 2035"
-)
 
+# ---------------- Header ----------------
+st.title("Luxury Store CO₂ Reduction Dashboard")
+st.caption(
+    "Multi-market retail portfolio · Hong Kong · Singapore · Korea · China · "
+    "Baseline 2021 · Trajectory to 2035"
+)
+st.divider()
+
+
+# ---------------- Tabs ----------------
 tabs = st.tabs([
-    "🌍 LCA Index",
-    "📉 Overview & Trajectory",
-    "🏗️ Capital Goods",
-    "🎨 Seasonal & VM",
-    "⚡ Scope 1+2",
-    "♻️ Circularity & Waste",
-    "🔍 Data Quality",
-    "ℹ️ About & Method",
+    "Overview",
+    "LCA Index",
+    "Capital Goods",
+    "Seasonal & VM",
+    "Scope 1+2",
+    "Circularity & Waste",
+    "Data Quality",
+    "Method",
 ])
 
 
 # ============================================================
-# TAB 1 — LCA INDEX
+# TAB 1 — OVERVIEW
 # ============================================================
 with tabs[0]:
-    st.subheader("🌍 End-to-end lifecycle view — the index")
+    st.subheader("Absolute emissions trajectory, 2021–2035")
     st.caption(
-        "The entire operational footprint from raw material extraction through end of life. "
-        "The sum of all stages equals the 2021 baseline. Every other tab drills into a stage."
+        "Projected store-attributable emissions against the planned trajectory. "
+        "Click a bar to inspect its drivers. Click a slice in the contribution pie "
+        "to drill into the five-level breakdown."
     )
+
+    f1, f2, f3 = st.columns([2, 1, 1])
+    with f1:
+        country_filter = st.multiselect(
+            "Markets in scope",
+            options=C.MARKETS,
+            default=C.MARKETS,
+            key="countries",
+        )
+    if not country_filter:
+        country_filter = C.MARKETS
+
+    emissions = calc.scaled_annual_emissions(country_filter)
+    plan = calc.plan_trajectory(country_filter)
+    years = sorted(emissions.keys())
+    years_str = [str(y) for y in years]
+
+    base_v = emissions[C.BASELINE_YEAR]
+    end_v = emissions[C.TARGET_YEAR]
+    plan_v = plan[C.TARGET_YEAR]
+    variance = end_v - plan_v
+    pct = (1 - end_v / base_v) * 100 if base_v else 0.0
+
+    k1, k2, k3, k4, k5 = st.columns(5)
+    k1.metric(f"{C.BASELINE_YEAR} baseline", f"{base_v:,.0f} tCO₂e")
+    k2.metric(f"{C.TARGET_YEAR} projected", f"{end_v:,.0f} tCO₂e")
+    k3.metric(f"{C.TARGET_YEAR} plan", f"{plan_v:,.0f} tCO₂e")
+    k4.metric("Variance vs plan", f"{variance:+,.0f} tCO₂e")
+    k5.metric("Reduction vs baseline", f"−{pct:.1f}%")
+
+    fig = go.Figure()
+    # ±5% plan tolerance band
+    fig.add_trace(go.Scatter(
+        x=years_str, y=[plan[y] * 1.05 for y in years],
+        mode="lines", line=dict(width=0), hoverinfo="skip", showlegend=False,
+    ))
+    fig.add_trace(go.Scatter(
+        x=years_str, y=[plan[y] * 0.95 for y in years],
+        mode="lines", line=dict(width=0), fill="tonexty",
+        fillcolor="rgba(176,141,87,0.12)",
+        hoverinfo="skip", showlegend=False,
+    ))
+    fig.add_trace(go.Bar(
+        x=years_str, y=[emissions[y] for y in years],
+        name="Projected emissions",
+        marker_color=P["ink"],
+        hovertemplate="%{x}<br>%{y:,.0f} tCO₂e<extra></extra>",
+    ))
+    fig.add_trace(go.Scatter(
+        x=years_str, y=[plan[y] for y in years],
+        mode="lines+markers", name="Planned trajectory",
+        line=dict(color=P["gold"], width=2.5, dash="dash"),
+        marker=dict(size=6, color=P["gold"]),
+        hovertemplate="Plan %{x}<br>%{y:,.0f} tCO₂e<extra></extra>",
+    ))
+    fig.update_layout(
+        height=480,
+        yaxis_title="tCO₂e / yr",
+        xaxis_title="Year",
+        bargap=0.35,
+        legend=dict(orientation="h", y=1.10, x=0),
+        margin=dict(t=40, b=40, l=10, r=10),
+        hovermode="x unified",
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        yaxis=dict(gridcolor=P["grid"]),
+    )
+    bar_event = _safe_plotly(fig, key="ov_bar")
+
+    sel_year = _clicked(bar_event, fallback=None)
+    try:
+        sel_year = int(sel_year)
+    except Exception:
+        sel_year = C.TARGET_YEAR
+    if sel_year not in emissions:
+        sel_year = C.TARGET_YEAR
+
+    st.caption(
+        f"**Selected year:** {sel_year} · modeled {emissions[sel_year]:,.0f} tCO₂e · "
+        f"plan {plan[sel_year]:,.0f} tCO₂e · "
+        f"variance {emissions[sel_year] - plan[sel_year]:+,.0f} tCO₂e"
+    )
+
+    st.divider()
+
+    left, right = st.columns([1, 1])
+
+    with left:
+        st.markdown(f"#### Reduction drivers in {sel_year}")
+        year_drivers = calc.year_drivers(sel_year, country_filter)
+        if year_drivers:
+            d_df = pd.DataFrame(
+                sorted(year_drivers.items(), key=lambda x: -x[1]),
+                columns=["Driver", "tCO2e"],
+            )
+            fig_d = px.bar(d_df, x="tCO2e", y="Driver", orientation="h", text="tCO2e")
+            fig_d.update_traces(
+                texttemplate="%{text:,.0f}", textposition="outside",
+                marker_color=P["gold"],
+            )
+            fig_d.update_layout(
+                height=340, showlegend=False,
+                yaxis=dict(categoryorder="total ascending", title=""),
+                xaxis=dict(title="tCO₂e saved", gridcolor=P["grid"]),
+                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                margin=dict(t=10, b=10, l=10, r=10),
+            )
+            st.plotly_chart(fig_d, use_container_width=True, key="ov_drivers_year")
+        else:
+            st.info(f"No reductions modeled for {sel_year}. Click another bar.")
+
+    with right:
+        st.markdown("#### Contribution by initiative, cumulative to 2035")
+        cum = calc.cumulative_by_driver(country_filter)
+        c_df = pd.DataFrame(
+            sorted(cum.items(), key=lambda x: -x[1]),
+            columns=["Driver", "tCO2e"],
+        )
+        fig_p = px.pie(
+            c_df, names="Driver", values="tCO2e", hole=0.55,
+            color_discrete_sequence=CHART_COLORS,
+        )
+        fig_p.update_traces(
+            textinfo="percent",
+            textfont=dict(color="white", size=12),
+            marker=dict(line=dict(color="white", width=2)),
+        )
+        fig_p.update_layout(
+            height=340, showlegend=True,
+            legend=dict(orientation="v", x=1.0, y=0.5, font=dict(size=11)),
+            margin=dict(t=10, b=10, l=10, r=10),
+            paper_bgcolor="rgba(0,0,0,0)",
+        )
+        pie_event = _safe_plotly(fig_p, key="ov_pie")
+        sel_driver = _clicked(pie_event, fallback=None)
+        if sel_driver not in C.INITIATIVES:
+            sel_driver = None
+
+    st.divider()
+    if sel_driver:
+        st.markdown(f"#### Drill-down · {sel_driver} · {sel_year}")
+        dd = DD.drill_down(sel_year, sel_driver, country_filter)
+
+        st.caption(
+            f"Activity type · {dd['activity_type']} · "
+            f"total reduction in {sel_year}: {dd['total']:,.1f} tCO₂e"
+        )
+
+        c3, c4 = st.columns(2)
+        with c3:
+            st.markdown("**Country**")
+            cdf = pd.DataFrame(
+                sorted(
+                    [(k, v["total"]) for k, v in dd["countries"].items()],
+                    key=lambda x: -x[1],
+                ),
+                columns=["Country", "tCO2e"],
+            )
+            fig_c = px.bar(cdf, x="tCO2e", y="Country", orientation="h", text="tCO2e")
+            fig_c.update_traces(
+                texttemplate="%{text:,.1f}", textposition="outside",
+                marker_color=P["ink"],
+            )
+            fig_c.update_layout(
+                height=260, showlegend=False,
+                yaxis=dict(categoryorder="total ascending", title=""),
+                xaxis=dict(title="tCO₂e", gridcolor=P["grid"]),
+                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                margin=dict(t=10, b=10, l=10, r=10),
+            )
+            st.plotly_chart(fig_c, use_container_width=True, key="dd_country")
+
+        with c4:
+            st.markdown("**Area of activity**")
+            area_totals = {}
+            for c, v in dd["countries"].items():
+                for a, av in v["areas"].items():
+                    area_totals[a] = area_totals.get(a, 0) + av["total"]
+            adf = pd.DataFrame(
+                sorted(area_totals.items(), key=lambda x: -x[1]),
+                columns=["Area", "tCO2e"],
+            )
+            fig_a = px.bar(adf, x="tCO2e", y="Area", orientation="h", text="tCO2e")
+            fig_a.update_traces(
+                texttemplate="%{text:,.1f}", textposition="outside",
+                marker_color=P["gold"],
+            )
+            fig_a.update_layout(
+                height=260, showlegend=False,
+                yaxis=dict(categoryorder="total ascending", title=""),
+                xaxis=dict(title="tCO₂e", gridcolor=P["grid"]),
+                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                margin=dict(t=10, b=10, l=10, r=10),
+            )
+            st.plotly_chart(fig_a, use_container_width=True, key="dd_area")
+
+        st.markdown("**Specific items**")
+        rows = []
+        for c, v in dd["countries"].items():
+            for a, av in v["areas"].items():
+                for item, iv in av["items"].items():
+                    rows.append({
+                        "Country": c,
+                        "Area of activity": a,
+                        "Specific item": item,
+                        "tCO₂e": round(iv, 2),
+                    })
+        idf = pd.DataFrame(rows).sort_values(
+            ["Country", "Area of activity", "tCO₂e"],
+            ascending=[True, True, False],
+        )
+        st.dataframe(idf, use_container_width=True, hide_index=True)
+    else:
+        st.info(
+            "Click a slice of the contribution pie to drill into the five-level breakdown "
+            "(driver → activity type → country → area of activity → specific item)."
+        )
+
+
+# ============================================================
+# TAB 2 — LCA INDEX
+# ============================================================
+with tabs[1]:
+    st.subheader("End-to-end lifecycle view")
+    st.caption(
+        "The full operational footprint from raw material extraction through end of life. "
+        "Stages sum to the 2021 baseline. The scale reflects markets selected on the Overview tab."
+    )
+
+    cov = calc.coverage_factor(st.session_state.get("countries", C.MARKETS) or C.MARKETS)
 
     lca_df = pd.DataFrame({
         "Stage": list(C.LCA_STAGES.keys()),
-        "tCO2e": list(C.LCA_STAGES.values()),
+        "tCO2e": [v * cov for v in C.LCA_STAGES.values()],
     })
     lca_df["% of total"] = (lca_df["tCO2e"] / lca_df["tCO2e"].sum() * 100).round(1)
 
-    col_a, col_b = st.columns([3, 2])
-    with col_a:
-        fig = px.bar(
-            lca_df, x="tCO2e", y="Stage", orientation="h",
-            text="% of total", color="Stage",
+    cA, cB = st.columns([3, 2])
+    with cA:
+        fig = px.bar(lca_df, x="tCO2e", y="Stage", orientation="h", text="% of total")
+        fig.update_traces(
+            texttemplate="%{text}%", textposition="outside",
+            marker_color=P["ink"],
         )
-        fig.update_traces(texttemplate="%{text}%", textposition="outside")
         fig.update_layout(
-            height=540, showlegend=False,
-            title=f"LCA stages — total {C.BASELINE_TOTAL_TCO2E:,.0f} tCO₂e (baseline {C.BASELINE_YEAR})",
+            height=520, showlegend=False,
+            title=f"LCA stages — total {lca_df['tCO2e'].sum():,.0f} tCO₂e (baseline {C.BASELINE_YEAR})",
             xaxis_title="tCO₂e / yr",
             yaxis=dict(categoryorder="total ascending"),
+            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key="lca_bar")
 
-    with col_b:
+    with cB:
         fig2 = px.treemap(
             lca_df, path=["Stage"], values="tCO2e", color="tCO2e",
-            color_continuous_scale="Greens",
+            color_continuous_scale=[[0, "#EFEAE0"], [1, P["ink"]]],
         )
-        fig2.update_layout(height=540, title="Share of baseline footprint")
-        st.plotly_chart(fig2, use_container_width=True)
+        fig2.update_layout(
+            height=520, title="Share of baseline footprint",
+            paper_bgcolor="rgba(0,0,0,0)",
+        )
+        st.plotly_chart(fig2, use_container_width=True, key="lca_tree")
 
     st.dataframe(lca_df, use_container_width=True, hide_index=True)
     st.info(
-        "**How to use this page.** The Overview tab shows how this total falls year by year toward 2035. "
+        "The Overview tab shows how this total falls year by year toward 2035. "
         "Each stage then has its own tab: Operations → Scope 1+2; Store fit-out → Capital Goods; "
         "Seasonal/VM → Seasonal & VM; End of life → Circularity & Waste."
     )
 
 
 # ============================================================
-# TAB 2 — OVERVIEW & TRAJECTORY (WATERFALL + DRILL-DOWN)
+# Helper for opportunity-matrix tabs
 # ============================================================
-with tabs[1]:
-    st.subheader("📉 Absolute emissions trajectory: 2021 baseline → 2035")
-    st.caption(
-        "Modeled yearly reductions, aggregated across the four markets. The starting bar is the 2021 "
-        "baseline; each following bar is that year's reduction; the final bar is the 2035 total."
-    )
-
-    labels, values, measures = calc.waterfall_data()
-    emissions = calc.annual_emissions()
-
-    fig = go.Figure(go.Waterfall(
-        name="Trajectory", orientation="v",
-        measure=measures, x=labels, y=values,
-        text=[f"{v:,.0f}" if m == "absolute" else f"−{abs(v):,.0f}" for v, m in zip(values, measures)],
-        textposition="outside",
-        connector={"line": {"color": "rgb(63, 63, 63)"}},
-        decreasing={"marker": {"color": "#EF553B"}},
-        increasing={"marker": {"color": "#636EFA"}},
-        totals={"marker": {"color": "#00CC96"}},
-    ))
-    fig.update_layout(
-        title=(
-            f"Absolute emissions waterfall — "
-            f"{C.BASELINE_TOTAL_TCO2E:,.0f} tCO₂e in {C.BASELINE_YEAR} → "
-            f"{emissions[C.TARGET_YEAR]:,.0f} tCO₂e in {C.TARGET_YEAR}"
-        ),
-        yaxis_title="tCO₂e / yr",
-        height=540, showlegend=False,
-        margin=dict(t=60, b=60),
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-    reduction_pct = (1 - emissions[C.TARGET_YEAR] / C.BASELINE_TOTAL_TCO2E) * 100
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric(f"{C.BASELINE_YEAR} baseline", f"{C.BASELINE_TOTAL_TCO2E:,.0f} tCO₂e")
-    c2.metric(f"{C.TARGET_YEAR} projected", f"{emissions[C.TARGET_YEAR]:,.0f} tCO₂e")
-    c3.metric("Total reduction", f"−{reduction_pct:.1f}%")
-    c4.metric("Cumulative avoided", f"{C.BASELINE_TOTAL_TCO2E - emissions[C.TARGET_YEAR]:,.0f} tCO₂e")
-
-    st.divider()
-    st.subheader("🔎 Drill down into a year's reductions")
-    st.caption(
-        "Five levels of granularity: driver → activity type → country → area of activity → specific item. "
-        "Choose a year, then narrow down through the selectors."
-    )
-
-    active_years = sorted([
-        y for y in range(C.BASELINE_YEAR + 1, C.TARGET_YEAR + 1)
-        if y in calc.annual_reductions()
-    ])
-    sel_year = st.selectbox("1️⃣ Year", active_years, index=len(active_years) - 1, key="dd_year")
-
-    drivers_this_year = DD.drivers_for_year(sel_year)
-    if not drivers_this_year:
-        st.warning("No reductions modeled for this year.")
-    else:
-        driver_labels = [
-            f"{d} — {v:,.0f} tCO₂e"
-            for d, v in sorted(drivers_this_year.items(), key=lambda x: -x[1])
-        ]
-        sel_driver_label = st.selectbox("2️⃣ Level 1 — Driver (initiative)", driver_labels, key="dd_driver")
-        sel_driver = sel_driver_label.split(" — ")[0]
-
-        dd = DD.drill_down(sel_year, sel_driver)
-        st.caption(f"**Level 2 — Activity type:** {dd['activity_type']}")
-
-        countries_sorted = sorted(dd["countries"].items(), key=lambda x: -x[1]["total"])
-        sel_country_label = st.selectbox(
-            "3️⃣ Level 3 — Country",
-            [f"{c} — {v['total']:,.1f} tCO₂e" for c, v in countries_sorted],
-            key="dd_country",
-        )
-        sel_country = sel_country_label.split(" — ")[0]
-
-        areas = dd["countries"][sel_country]["areas"]
-        areas_sorted = sorted(areas.items(), key=lambda x: -x[1]["total"])
-        sel_area_label = st.selectbox(
-            "4️⃣ Level 4 — Area of activity",
-            [f"{a} — {v['total']:,.1f} tCO₂e" for a, v in areas_sorted],
-            key="dd_area",
-        )
-        sel_area = sel_area_label.split(" — ")[0]
-
-        items = areas[sel_area]["items"]
-        items_sorted = sorted(items.items(), key=lambda x: -x[1])
-        sel_item_label = st.selectbox(
-            "5️⃣ Level 5 — Specific item",
-            [f"{i} — {v:,.2f} tCO₂e" for i, v in items_sorted],
-            key="dd_item",
-        )
-        sel_item = sel_item_label.split(" — ")[0]
-
-        st.success(
-            f"**{sel_year} · {sel_driver} · {sel_country} · {sel_area} · {sel_item}** "
-            f"— modeled reduction: **{items[sel_item]:,.2f} tCO₂e**"
-        )
-
-        st.divider()
-        c_a, c_b = st.columns(2)
-        with c_a:
-            fig = px.bar(
-                x=[c for c, _ in countries_sorted],
-                y=[v["total"] for _, v in countries_sorted],
-                labels={"x": "Country", "y": "tCO₂e reduction"},
-                title=f"{sel_driver} — by country ({sel_year})",
-                color=[c for c, _ in countries_sorted],
-            )
-            fig.update_layout(showlegend=False, height=360)
-            st.plotly_chart(fig, use_container_width=True)
-        with c_b:
-            fig = px.bar(
-                x=[a for a, _ in areas_sorted],
-                y=[v["total"] for _, v in areas_sorted],
-                labels={"x": "Area of activity", "y": "tCO₂e reduction"},
-                title=f"{sel_driver} — by area ({sel_country}, {sel_year})",
-                color=[a for a, _ in areas_sorted],
-            )
-            fig.update_layout(showlegend=False, height=360)
-            st.plotly_chart(fig, use_container_width=True)
-
-
-# ============================================================
-# Generic helper for opportunity-matrix tabs
-# ============================================================
-def render_opportunity_tab(
-    opportunities, scope_area_key, title, intro,
-):
+def render_opportunity_tab(opportunities, scope_area_key, title, intro):
     st.subheader(title)
     st.caption(intro)
 
-    st.markdown("### 1. Full scope of items assessed")
+    st.markdown("#### 1. Full scope of items assessed")
     scope_rows = []
     for area_name, data in C.DRIVER_STRUCTURE[scope_area_key]["areas"].items():
         for item, w in data["weights"].items():
             scope_rows.append({
                 "Area of activity": area_name,
                 "Specific item": item,
-                "Relative share": f"{w*100:.0f}%",
+                "Relative share": f"{w * 100:.0f}%",
             })
     st.dataframe(pd.DataFrame(scope_rows), use_container_width=True, hide_index=True)
 
-    st.markdown("### 2. Initiatives matrix — effort vs impact (to 2035)")
+    st.markdown("#### 2. Initiatives matrix — effort vs impact (to 2035)")
     opp_df = pd.DataFrame(
         opportunities,
         columns=["Initiative", "Impact (tCO2e by 2035)", "Effort (1–5)", "Status"],
     )
-    status_colors = {"Acted": "#00CC96", "In progress": "#FFA15A", "Opportunity": "#EF553B"}
+    status_colors = {
+        "Acted": P["green"],
+        "In progress": P["gold"],
+        "Opportunity": P["oxblood"],
+    }
 
     c_a, c_b = st.columns([2, 1])
     with c_a:
@@ -288,9 +460,13 @@ def render_opportunity_tab(
             color_discrete_map=status_colors, hover_name="Initiative",
             title="Effort vs impact",
         )
-        fig.update_layout(height=480)
+        fig.update_layout(
+            height=480,
+            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(gridcolor=P["grid"]), yaxis=dict(gridcolor=P["grid"]),
+        )
         fig.update_xaxes(range=[0, 5.5], tickmode="array", tickvals=[1, 2, 3, 4, 5])
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key=f"opp_scatter_{scope_area_key}")
     with c_b:
         st.markdown("**Reading the matrix**")
         st.markdown(
@@ -303,7 +479,7 @@ def render_opportunity_tab(
             sub = opp_df[opp_df["Status"] == status]
             st.metric(status, f"{sub['Impact (tCO2e by 2035)'].sum():,.0f} tCO₂e")
 
-    st.markdown("### 3. Initiative detail")
+    st.markdown("#### 3. Initiative detail")
     st.dataframe(
         opp_df.sort_values(["Status", "Impact (tCO2e by 2035)"], ascending=[True, False]),
         use_container_width=True, hide_index=True,
@@ -317,19 +493,23 @@ with tabs[2]:
     render_opportunity_tab(
         C.FITOUT_OPPORTUNITIES,
         "Circular fit-out redesign",
-        "🏗️ Capital goods — boutique fit-out",
+        "Capital goods — boutique fit-out",
         "Full scope of assessable items, then the initiatives matrix (effort vs impact) to 2035. "
         "Items highlighted as 'Acted' or 'In progress' are already in delivery; 'Opportunity' items are unclaimed.",
     )
-
     st.divider()
     st.subheader("Modeled fit-out footprint by market")
     fig = px.bar(
         df, x="Market", y="Fit-out annualized (tCO2e)", color="Market",
-        text_auto=".0f", title="Annualized fit-out embodied carbon",
+        color_discrete_sequence=CHART_COLORS, text_auto=".0f",
+        title="Annualized fit-out embodied carbon",
     )
-    fig.update_layout(showlegend=False, height=380)
-    st.plotly_chart(fig, use_container_width=True)
+    fig.update_layout(
+        showlegend=False, height=380,
+        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+        yaxis=dict(gridcolor=P["grid"]),
+    )
+    st.plotly_chart(fig, use_container_width=True, key="cap_market_bar")
 
 
 # ============================================================
@@ -339,10 +519,9 @@ with tabs[3]:
     render_opportunity_tab(
         C.SEASONAL_OPPORTUNITIES,
         "VM & seasonal reuse",
-        "🎨 Seasonal builds, visual merchandising and events",
+        "Seasonal builds, visual merchandising and events",
         "Highest-velocity carbon source. Full item scope first, then the effort/impact matrix.",
     )
-
     st.divider()
     st.subheader("Gross → avoided → memo net position")
     gross = df["Seasonal/VM (tCO2e)"].sum()
@@ -352,11 +531,19 @@ with tabs[3]:
         y=[gross, -avoid, 0],
         measure=["absolute", "relative", "total"],
         text=[f"{gross:,.0f}", f"-{avoid:,.0f}", f"{gross - avoid:,.0f}"],
+        decreasing={"marker": {"color": P["gold"]}},
+        increasing={"marker": {"color": P["ink"]}},
+        totals={"marker": {"color": P["green"]}},
+        connector={"line": {"color": P["grey"]}},
     ))
-    bridge.update_layout(height=380, yaxis_title="tCO₂e / yr", showlegend=False)
-    st.plotly_chart(bridge, use_container_width=True)
+    bridge.update_layout(
+        height=380, yaxis_title="tCO₂e / yr", showlegend=False,
+        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+        yaxis_gridcolor=P["grid"],
+    )
+    st.plotly_chart(bridge, use_container_width=True, key="vm_bridge")
     st.caption(
-        "Avoided emissions sit **outside** the Scope 3 inventory boundary. "
+        "Avoided emissions sit outside the Scope 3 inventory boundary. "
         "They are a memo item, not a netting claim."
     )
 
@@ -368,10 +555,9 @@ with tabs[4]:
     render_opportunity_tab(
         C.ENERGY_OPPORTUNITIES,
         "Renewable electricity transition",
-        "⚡ Scope 1+2 — Operational energy and refrigerants",
+        "Scope 1+2 — Operational energy and refrigerants",
         "Full item scope first (energy end-uses, refrigerants), then the effort/impact matrix.",
     )
-
     st.divider()
     st.subheader("Modeled Scope 1+2 by market")
     c1, c2, c3 = st.columns(3)
@@ -381,15 +567,29 @@ with tabs[4]:
 
     c_a, c_b = st.columns(2)
     with c_a:
-        fig = px.bar(df, x="Market", y="Scope 2 (tCO2e)", color="Market",
-                     text_auto=".0f", title="Scope 2 (location-based)")
-        fig.update_layout(showlegend=False, height=380)
-        st.plotly_chart(fig, use_container_width=True)
+        fig = px.bar(
+            df, x="Market", y="Scope 2 (tCO2e)", color="Market",
+            color_discrete_sequence=CHART_COLORS, text_auto=".0f",
+            title="Scope 2 (location-based)",
+        )
+        fig.update_layout(
+            showlegend=False, height=380,
+            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+            yaxis=dict(gridcolor=P["grid"]),
+        )
+        st.plotly_chart(fig, use_container_width=True, key="scope2_bar")
     with c_b:
-        fig = px.bar(df, x="Market", y="Scope 1 refrigerant (tCO2e)", color="Market",
-                     text_auto=".1f", title="Scope 1 refrigerant")
-        fig.update_layout(showlegend=False, height=380)
-        st.plotly_chart(fig, use_container_width=True)
+        fig = px.bar(
+            df, x="Market", y="Scope 1 refrigerant (tCO2e)", color="Market",
+            color_discrete_sequence=CHART_COLORS, text_auto=".1f",
+            title="Scope 1 refrigerant",
+        )
+        fig.update_layout(
+            showlegend=False, height=380,
+            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+            yaxis=dict(gridcolor=P["grid"]),
+        )
+        st.plotly_chart(fig, use_container_width=True, key="scope1_bar")
 
     st.warning(
         "Market-based Scope 2 will be lower where renewable procurement covers these markets. "
@@ -405,10 +605,9 @@ with tabs[5]:
     render_opportunity_tab(
         C.WASTE_OPPORTUNITIES,
         "Waste diversion",
-        "♻️ Circularity and end-of-life management",
+        "Circularity and end-of-life management",
         "Full scope of waste streams, then circularity indicators, then the effort/impact matrix.",
     )
-
     st.divider()
     st.subheader("Circularity indicators by market (modeled)")
     circ = pd.DataFrame({
@@ -420,10 +619,17 @@ with tabs[5]:
         "Waste diversion": [C.DIVERSION_RATE * 100 for _ in C.MARKETS],
     })
     melted = circ.melt(id_vars="Market", var_name="Indicator", value_name="%")
-    fig = px.bar(melted, x="Indicator", y="%", color="Market", barmode="group",
-                 title="Circularity indicators (%)")
-    fig.update_layout(height=440, yaxis_range=[0, 100])
-    st.plotly_chart(fig, use_container_width=True)
+    fig = px.bar(
+        melted, x="Indicator", y="%", color="Market", barmode="group",
+        color_discrete_sequence=CHART_COLORS,
+        title="Circularity indicators (%)",
+    )
+    fig.update_layout(
+        height=440, yaxis_range=[0, 100],
+        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+        yaxis=dict(gridcolor=P["grid"]),
+    )
+    st.plotly_chart(fig, use_container_width=True, key="circ_bars")
     st.dataframe(circ, use_container_width=True, hide_index=True)
 
     st.markdown("**Thresholds to track against**")
@@ -439,8 +645,10 @@ with tabs[5]:
 # TAB 7 — DATA QUALITY
 # ============================================================
 with tabs[6]:
-    st.subheader("🔍 Data-quality heat map")
-    st.caption("Every cell is Tier 3 (modeled) in this draft. Use this to sequence the first data-collection wave.")
+    st.subheader("Data-quality heat map")
+    st.caption(
+        "Every cell is Tier 3 (modeled) in this draft. Use this to sequence the first data-collection wave."
+    )
     quality = pd.DataFrame(
         {
             "Hong Kong": ["Tier 3", "Tier 3", "Tier 3", "Tier 3", "Tier 3", "Tier 3", "Not included"],
@@ -465,10 +673,10 @@ with tabs[6]:
 
 
 # ============================================================
-# TAB 8 — ABOUT & METHOD
+# TAB 8 — METHOD
 # ============================================================
 with tabs[7]:
-    st.subheader("ℹ️ About this draft")
+    st.subheader("About this draft")
     st.markdown(f"""
 **Baseline framework:** 1.5°C-aligned retail pathway, {C.BASELINE_YEAR} base year.
 
@@ -493,7 +701,7 @@ with tabs[7]:
 
 **Data status:** All figures are Tier 3 modeled estimates built from public benchmarks
 (retail embodied carbon, apparel/fashion energy intensity, public 2025 grid factors,
-circularity standards, WBCSD CTI thresholds). The dashboard is a *frame* for replacing
+circularity standards, WBCSD CTI thresholds). The dashboard is a frame for replacing
 estimates with store-level data — not a performance claim.
 
 **Next steps:**
