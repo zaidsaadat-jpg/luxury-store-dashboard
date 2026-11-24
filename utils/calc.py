@@ -8,9 +8,6 @@ from utils.constants import (
 )
 
 
-# ============================================================
-# Static footprint helpers
-# ============================================================
 def calc_floor_area():
     return {m: STORE_COUNTS[m] * AVG_GIA_M2 for m in MARKETS}
 
@@ -63,7 +60,6 @@ def country_factor(driver, countries):
 
 
 def coverage_factor(countries):
-    """Weighted share of the portfolio captured by the selected markets."""
     total = 0.0
     covered = 0.0
     for driver, yearly in INITIATIVES.items():
@@ -74,7 +70,6 @@ def coverage_factor(countries):
 
 
 def year_drivers(year, countries):
-    """Return {driver: tco2e saved} in a given year, scaled to selected markets."""
     return {
         d: yearly[year] * country_factor(d, countries)
         for d, yearly in INITIATIVES.items()
@@ -83,7 +78,6 @@ def year_drivers(year, countries):
 
 
 def cumulative_by_driver(countries):
-    """Return {driver: cumulative tco2e saved 2021-2035}, scaled to selected markets."""
     return {
         d: sum(yearly.values()) * country_factor(d, countries)
         for d, yearly in INITIATIVES.items()
@@ -106,7 +100,6 @@ def scaled_annual_emissions(countries):
 
 
 def plan_trajectory(countries):
-    """Piecewise-linear planned trajectory, scaled to selected markets."""
     cov = coverage_factor(countries)
     anchors = sorted(PLAN_TRAJECTORY.items())
     out = {}
@@ -123,3 +116,16 @@ def plan_trajectory(countries):
             v = seg_lo[1] + t * (seg_hi[1] - seg_lo[1])
         out[y] = v * cov
     return out
+
+
+def monthly_driver_breakdown(year, countries):
+    """Return {driver: [tco2e per month]} for the selected year, scaled to selected markets."""
+    result = {}
+    for driver, yearly in INITIATIVES.items():
+        if year not in yearly:
+            continue
+        annual = yearly[year] * country_factor(driver, countries)
+        if annual <= 0:
+            continue
+        result[driver] = [annual / 12.0] * 12
+    return result
