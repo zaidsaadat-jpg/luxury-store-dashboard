@@ -82,6 +82,19 @@ INITIATIVES = {
     },
 }
 
+# ============================================================
+# Plan trajectory — planned absolute emissions by anchor year.
+# Separate from the initiative-driven trajectory so variance
+# against plan can be computed. Missing years are interpolated
+# linearly in calc.py.
+# ============================================================
+PLAN_TRAJECTORY = {
+    2021: 10000.0,
+    2025: 8600.0,
+    2030: 5000.0,
+    2035: 3000.0,
+}
+
 # Country allocation weights per driver
 COUNTRY_WEIGHTS = {
     "Renewable electricity transition": {"Hong Kong": 0.15, "Singapore": 0.08, "Korea": 0.20, "China": 0.57},
