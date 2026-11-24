@@ -3,10 +3,14 @@ from utils.constants import (
     REFRIGERANT_KG_PER_STORE, REFRIGERANT_GWP, FITOUT_INTENSITY,
     RENOVATION_CYCLE, SEASONAL_INTENSITY, SELLING_AREA_RATIO,
     FITOUT_WASTE_INTENSITY, MIXED_WASTE_EF_T_PER_TONNE, VM_REUSE,
-    INITIATIVES, BASELINE_YEAR, TARGET_YEAR, BASELINE_TOTAL_TCO2E,
+    INITIATIVES, COUNTRY_WEIGHTS, PLAN_TRAJECTORY,
+    BASELINE_YEAR, TARGET_YEAR, BASELINE_TOTAL_TCO2E,
 )
 
 
+# ============================================================
+# Static footprint helpers (unchanged)
+# ============================================================
 def calc_floor_area():
     return {m: STORE_COUNTS[m] * AVG_GIA_M2 for m in MARKETS}
 
@@ -52,35 +56,70 @@ def calc_waste_category5():
 
 
 # ============================================================
-# Trajectory calculations
+# Trajectory helpers
 # ============================================================
-def annual_reductions():
-    """Return {year: {driver: tco2e_saved}}."""
-    years = {}
-    for driver, amounts in INITIATIVES.items():
-        for year, amount in amounts.items():
-            years.setdefault(year, {})[driver] = amount
-    return years
+def country_factor(driver, countries):
+    return sum(COUNTRY_WEIGHTS[driver].get(c, 0.0) for c in countries)
 
 
-def annual_emissions():
-    """Return {year: absolute tco2e} from baseline through target year."""
-    reductions = annual_reductions()
-    emissions = {BASELINE_YEAR: BASELINE_TOTAL_TCO2E}
-    current = BASELINE_TOTAL_TCO2E
-    for year in range(BASELINE_YEAR + 1, TARGET_YEAR + 1):
-        current -= sum(reductions.get(year, {}).values())
-        emissions[year] = current
+def coverage_factor(countries):
+    """Weighted share of the portfolio captured by the selected markets."""
+    total = 0.0
+    covered = 0.0
+    for driver, yearly in INITIATIVES.items():
+        s = sum(yearly.values())
+        total += s
+        covered += s * country_factor(driver, countries)
+    return (covered / total) if total else 0.0
+
+
+def year_drivers(year, countries):
+    """Return {driver: tco2e saved} in a given year, scaled to selected markets."""
+    return {
+        d: yearly[year] * country_factor(d, countries)
+        for d, yearly in INITIATIVES.items()
+        if year in yearly
+    }
+
+
+def cumulative_by_driver(countries):
+    """Return {driver: cumulative tco2e saved 2021-2035}, scaled to selected markets."""
+    return {
+        d: sum(yearly.values()) * country_factor(d, countries)
+        for d, yearly in INITIATIVES.items()
+    }
+
+
+def scaled_annual_emissions(countries):
+    cov = coverage_factor(countries)
+    base = BASELINE_TOTAL_TCO2E * cov
+    emissions = {BASELINE_YEAR: base}
+    current = base
+    for y in range(BASELINE_YEAR + 1, TARGET_YEAR + 1):
+        current -= sum(
+            yearly[y] * country_factor(d, countries)
+            for d, yearly in INITIATIVES.items()
+            if y in yearly
+        )
+        emissions[y] = current
     return emissions
 
 
-def waterfall_data():
-    """Return (labels, values, measures) for plotly waterfall chart."""
-    emissions = annual_emissions()
-    years = sorted(emissions.keys())
-    labels = [str(y) for y in years]
-    values = [emissions[years[0]]]
-    for i in range(1, len(years)):
-        values.append(emissions[years[i]] - emissions[years[i - 1]])
-    measures = ["absolute"] + ["relative"] * (len(years) - 1)
-    return labels, values, measures
+def plan_trajectory(countries):
+    """Piecewise-linear planned trajectory, scaled to selected markets."""
+    cov = coverage_factor(countries)
+    anchors = sorted(PLAN_TRAJECTORY.items())
+    out = {}
+    for y in range(BASELINE_YEAR, TARGET_YEAR + 1):
+        seg_lo, seg_hi = anchors[0], anchors[-1]
+        for i in range(len(anchors) - 1):
+            if anchors[i][0] <= y <= anchors[i + 1][0]:
+                seg_lo, seg_hi = anchors[i], anchors[i + 1]
+                break
+        if seg_hi[0] == seg_lo[0]:
+            v = seg_lo[1]
+        else:
+            t = (y - seg_lo[0]) / (seg_hi[0] - seg_lo[0])
+            v = seg_lo[1] + t * (seg_hi[1] - seg_lo[1])
+        out[y] = v * cov
+    return out
