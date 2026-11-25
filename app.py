@@ -29,16 +29,8 @@ P = {
     "grid": "#E8E5E0",
 }
 CHART_COLORS = [
-    "#3D5A4A",  # sage green
-    "#B08D57",  # champagne
-    "#6B2C2C",  # oxblood
-    "#8A7044",  # bronze
-    "#A67C3D",  # amber
-    "#7A8B6F",  # pale sage
-    "#5A4A3A",  # taupe
-    "#C7B59A",  # cream
-    "#4A6B5A",  # muted green
-    "#A5504F",  # muted red
+    "#3D5A4A", "#B08D57", "#6B2C2C", "#8A7044", "#A67C3D",
+    "#7A8B6F", "#5A4A3A", "#C7B59A", "#4A6B5A", "#A5504F",
 ]
 
 st.markdown(
@@ -54,10 +46,14 @@ st.markdown(
         text-transform: uppercase; letter-spacing: 0.05em;
     }
     [data-testid="stMetricDelta"] { font-size: 0.8rem !important; }
-    .exec-summary { font-size: 0.86rem; line-height: 1.55; }
-    .exec-summary b { color: #1F1F1F; }
-    .exec-summary .variance-neg { color: #2E4A3A; font-weight: 600; }
-    .exec-summary .variance-pos { color: #6B2C2C; font-weight: 600; }
+
+    .exec-summary, .exec-summary * {
+        color: #1F1F1F !important;
+        font-size: 0.86rem; line-height: 1.6;
+    }
+    .exec-summary b, .exec-summary strong { font-weight: 600; }
+    .exec-summary .variance-neg { color: #2E4A3A !important; font-weight: 700; }
+    .exec-summary .variance-pos { color: #6B2C2C !important; font-weight: 700; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -124,7 +120,7 @@ df = pd.DataFrame({
 })
 df["Scope 1+2 total"] = df["Scope 2 (tCO2e)"] + df["Scope 1 refrigerant (tCO2e)"]
 
-# ---------------- Executive summary (for sidebar) ----------------
+# ---------------- Executive summary data ----------------
 all_em = calc.scaled_annual_emissions(C.MARKETS)
 all_plan = calc.plan_trajectory(C.MARKETS)
 all_cum = calc.cumulative_by_driver(C.MARKETS)
@@ -153,7 +149,11 @@ with st.sidebar:
     st.markdown("**Top reduction levers to 2035**")
     for i, (drv, val) in enumerate(top_3, start=1):
         scope = C.DRIVER_SCOPES.get(drv, "")
-        st.markdown(f"{i}. **{drv}** — {val:,.0f} tCO₂e  \n   <span style='color:#8A8A8A;font-size:0.78rem;'>{scope}</span>", unsafe_allow_html=True)
+        st.markdown(
+            f"{i}. **{drv}** — {val:,.0f} tCO₂e  \n"
+            f"&nbsp;&nbsp;<span style='color:#8A8A8A;font-size:0.78rem;'>{scope}</span>",
+            unsafe_allow_html=True,
+        )
     st.markdown("---")
     st.markdown("**Baseline framework**")
     st.caption(
@@ -189,7 +189,7 @@ with tabs[0]:
     st.subheader("Absolute emissions trajectory, 2021–2035")
     st.caption(
         "Projected store-attributable emissions against plan. "
-        "Select a year to drill into monthly detail. Click a bar or slice to select it in place."
+        "Select a year below or click a bar to drill into monthly detail."
     )
 
     country_filter = st.multiselect(
@@ -215,15 +215,30 @@ with tabs[0]:
     k4.metric("Variance vs plan", f"{var:+,.0f} tCO₂e")
     k5.metric("Reduction vs baseline", f"−{pct:.1f}%")
 
-    # Year selector — guaranteed mechanism, syncs with chart click
-    if "ov_year" not in st.session_state:
-        st.session_state.ov_year = C.TARGET_YEAR
-    sel_year = st.radio(
-        "Year", years, key="ov_year",
-        horizontal=True, label_visibility="collapsed",
+    # --- Year selection state (plain key, NOT widget key) ---
+    if "selected_year" not in st.session_state:
+        st.session_state.selected_year = C.TARGET_YEAR
+
+    # If the desired year differs from last time the widget was synced, reset widget
+    if st.session_state.get("_last_year_sync") != st.session_state.selected_year:
+        st.session_state.pop("year_widget", None)
+        st.session_state["_last_year_sync"] = st.session_state.selected_year
+
+    # Radio: reflects selected_year; syncs back on user click
+    st.radio(
+        "Year", years,
+        index=years.index(st.session_state.selected_year)
+        if st.session_state.selected_year in years else 0,
+        key="year_widget",
+        on_change=lambda: st.session_state.update(
+            selected_year=st.session_state.year_widget,
+            _last_year_sync=st.session_state.year_widget,
+        ),
+        horizontal=True,
+        label_visibility="collapsed",
     )
 
-    # Main trajectory chart
+    # Trajectory chart
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=years_str, y=[plan[y] * 1.05 for y in years],
@@ -265,9 +280,16 @@ with tabs[0]:
         clicked_year_int = int(clicked_year) if clicked_year is not None else None
     except (ValueError, TypeError):
         clicked_year_int = None
-    if clicked_year_int and clicked_year_int in emissions and clicked_year_int != sel_year:
-        st.session_state.ov_year = clicked_year_int
+
+    if (
+        clicked_year_int
+        and clicked_year_int in emissions
+        and clicked_year_int != st.session_state.selected_year
+    ):
+        st.session_state.selected_year = clicked_year_int
         st.rerun()
+
+    sel_year = st.session_state.selected_year
 
     # Monthly drill-down
     st.divider()
@@ -290,21 +312,19 @@ with tabs[0]:
                         "Driver": drv,
                         "Scope": C.DRIVER_SCOPES.get(drv, ""),
                         "tCO2e": v,
-                        "Month_idx": i,
                     })
             m_df = pd.DataFrame(monthly_rows)
-            order = {m: i for i, m in enumerate(C.MONTH_LABELS)}
 
-            # Stacked bars by driver per month
             fig_m = px.bar(
-                m_df,
-                x="Month", y="tCO2e", color="Driver",
+                m_df, x="Month", y="tCO2e", color="Driver",
                 color_discrete_sequence=CHART_COLORS,
                 category_orders={"Month": C.MONTH_LABELS},
                 title=f"{sel_year} — reduction by initiative, month by month",
             )
-            # cumulative line
-            cum_by_month = m_df.groupby("Month")["tCO2e"].sum().reindex(C.MONTH_LABELS).cumsum()
+            cum_by_month = (
+                m_df.groupby("Month")["tCO2e"].sum()
+                .reindex(C.MONTH_LABELS).cumsum()
+            )
             fig_m.add_trace(go.Scatter(
                 x=C.MONTH_LABELS, y=cum_by_month.values,
                 mode="lines+markers", name="Cumulative",
@@ -326,7 +346,6 @@ with tabs[0]:
             )
             st.plotly_chart(fig_m, use_container_width=True, key="ov_monthly")
 
-            # Year-total driver summary with scopes
             year_drv = calc.year_drivers(sel_year, country_filter)
             ydf = pd.DataFrame(
                 sorted(year_drv.items(), key=lambda x: -x[1]),
@@ -345,6 +364,14 @@ with tabs[0]:
         columns=["Driver", "tCO2e"],
     )
     c_df["Scope"] = c_df["Driver"].map(C.DRIVER_SCOPES)
+
+    # Initiative selection state (plain key)
+    if "selected_initiative" not in st.session_state:
+        st.session_state.selected_initiative = "— Select —"
+
+    if st.session_state.get("_last_init_sync") != st.session_state.selected_initiative:
+        st.session_state.pop("init_widget", None)
+        st.session_state["_last_init_sync"] = st.session_state.selected_initiative
 
     c_left, c_right = st.columns([2, 1])
     with c_left:
@@ -365,24 +392,36 @@ with tabs[0]:
         )
         pie_event = _safe_plotly(fig_p, key="ov_pie")
 
-    # Initiative selector — guaranteed mechanism
-    initiative_options = ["— Select —"] + list(C.INITIATIVES.keys())
-    if "ov_initiative" not in st.session_state:
-        st.session_state.ov_initiative = "— Select —"
-
     with c_right:
         st.markdown("**Drill-down**")
         st.radio(
-            "Initiative", initiative_options,
-            key="ov_initiative", label_visibility="collapsed",
+            "Initiative",
+            ["— Select —"] + list(C.INITIATIVES.keys()),
+            index=(
+                (["— Select —"] + list(C.INITIATIVES.keys())).index(
+                    st.session_state.selected_initiative
+                )
+                if st.session_state.selected_initiative in C.INITIATIVES
+                or st.session_state.selected_initiative == "— Select —"
+                else 0
+            ),
+            key="init_widget",
+            on_change=lambda: st.session_state.update(
+                selected_initiative=st.session_state.init_widget,
+                _last_init_sync=st.session_state.init_widget,
+            ),
+            label_visibility="collapsed",
         )
 
     clicked_drv = _clicked_value(pie_event, "ov_pie", field="label")
-    if clicked_drv in C.INITIATIVES and clicked_drv != st.session_state.ov_initiative:
-        st.session_state.ov_initiative = clicked_drv
+    if (
+        clicked_drv in C.INITIATIVES
+        and clicked_drv != st.session_state.selected_initiative
+    ):
+        st.session_state.selected_initiative = clicked_drv
         st.rerun()
 
-    selected_driver = st.session_state.ov_initiative
+    selected_driver = st.session_state.selected_initiative
     if selected_driver in C.INITIATIVES:
         st.divider()
         scope = C.DRIVER_SCOPES.get(selected_driver, "")
@@ -399,7 +438,10 @@ with tabs[0]:
         with c3:
             st.markdown("**Country**")
             cdf = pd.DataFrame(
-                sorted([(k, v["total"]) for k, v in dd["countries"].items()], key=lambda x: -x[1]),
+                sorted(
+                    [(k, v["total"]) for k, v in dd["countries"].items()],
+                    key=lambda x: -x[1],
+                ),
                 columns=["Country", "tCO2e"],
             )
             fig_c = px.bar(cdf, x="tCO2e", y="Country", orientation="h", text="tCO2e")
@@ -456,8 +498,8 @@ with tabs[0]:
         st.dataframe(idf, use_container_width=True, hide_index=True)
     else:
         st.info(
-            "Select a year above, then click an initiative slice (or use the radio) "
-            "to drill into the five-level breakdown."
+            "Select a year above, then click an initiative slice "
+            "(or use the selector on the right) to drill into the five-level breakdown."
         )
 
 
@@ -470,7 +512,9 @@ with tabs[1]:
         "Full operational footprint from raw material extraction through end of life. "
         "Stages sum to the 2021 baseline. Scale reflects markets selected on the Overview tab."
     )
-    cov = calc.coverage_factor(st.session_state.get("countries", C.MARKETS) or C.MARKETS)
+    cov = calc.coverage_factor(
+        st.session_state.get("countries", C.MARKETS) or C.MARKETS
+    )
     lca_df = pd.DataFrame({
         "Stage": list(C.LCA_STAGES.keys()),
         "tCO2e": [v * cov for v in C.LCA_STAGES.values()],
@@ -497,7 +541,10 @@ with tabs[1]:
             lca_df, path=["Stage"], values="tCO2e", color="tCO2e",
             color_continuous_scale=[[0, "#EFEAE0"], [1, P["sage"]]],
         )
-        fig2.update_layout(height=520, title="Share of baseline footprint", paper_bgcolor="rgba(0,0,0,0)")
+        fig2.update_layout(
+            height=520, title="Share of baseline footprint",
+            paper_bgcolor="rgba(0,0,0,0)",
+        )
         st.plotly_chart(fig2, use_container_width=True, key="lca_tree")
     st.dataframe(lca_df, use_container_width=True, hide_index=True)
 
@@ -523,7 +570,9 @@ def render_opportunity_tab(opportunities, scope_area_key, title, intro):
         opportunities,
         columns=["Initiative", "Impact (tCO2e by 2035)", "Effort (1–5)", "Status"],
     )
-    status_colors = {"Acted": P["green"], "In progress": P["gold"], "Opportunity": P["oxblood"]}
+    status_colors = {
+        "Acted": P["green"], "In progress": P["gold"], "Opportunity": P["oxblood"],
+    }
     c_a, c_b = st.columns([2, 1])
     with c_a:
         fig = px.scatter(
@@ -533,7 +582,8 @@ def render_opportunity_tab(opportunities, scope_area_key, title, intro):
             title="Effort vs impact",
         )
         fig.update_layout(
-            height=480, plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+            height=480,
+            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
             xaxis=dict(gridcolor=P["grid"]), yaxis=dict(gridcolor=P["grid"]),
         )
         fig.update_xaxes(range=[0, 5.5], tickmode="array", tickvals=[1, 2, 3, 4, 5])
@@ -628,20 +678,28 @@ with tabs[4]:
     c3.metric("Scope 1 refrigerant", f"{df['Scope 1 refrigerant (tCO2e)'].sum():,.0f} tCO₂e")
     c_a, c_b = st.columns(2)
     with c_a:
-        fig = px.bar(df, x="Market", y="Scope 2 (tCO2e)", color="Market",
-                     color_discrete_sequence=CHART_COLORS, text_auto=".0f",
-                     title="Scope 2 (location-based)")
-        fig.update_layout(showlegend=False, height=380,
-                          plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                          yaxis=dict(gridcolor=P["grid"]))
+        fig = px.bar(
+            df, x="Market", y="Scope 2 (tCO2e)", color="Market",
+            color_discrete_sequence=CHART_COLORS, text_auto=".0f",
+            title="Scope 2 (location-based)",
+        )
+        fig.update_layout(
+            showlegend=False, height=380,
+            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+            yaxis=dict(gridcolor=P["grid"]),
+        )
         st.plotly_chart(fig, use_container_width=True, key="scope2_bar")
     with c_b:
-        fig = px.bar(df, x="Market", y="Scope 1 refrigerant (tCO2e)", color="Market",
-                     color_discrete_sequence=CHART_COLORS, text_auto=".1f",
-                     title="Scope 1 refrigerant")
-        fig.update_layout(showlegend=False, height=380,
-                          plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                          yaxis=dict(gridcolor=P["grid"]))
+        fig = px.bar(
+            df, x="Market", y="Scope 1 refrigerant (tCO2e)", color="Market",
+            color_discrete_sequence=CHART_COLORS, text_auto=".1f",
+            title="Scope 1 refrigerant",
+        )
+        fig.update_layout(
+            showlegend=False, height=380,
+            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+            yaxis=dict(gridcolor=P["grid"]),
+        )
         st.plotly_chart(fig, use_container_width=True, key="scope1_bar")
 
 
@@ -665,11 +723,16 @@ with tabs[5]:
         "Waste diversion": [C.DIVERSION_RATE * 100 for _ in C.MARKETS],
     })
     melted = circ.melt(id_vars="Market", var_name="Indicator", value_name="%")
-    fig = px.bar(melted, x="Indicator", y="%", color="Market", barmode="group",
-                 color_discrete_sequence=CHART_COLORS, title="Circularity indicators (%)")
-    fig.update_layout(height=440, yaxis_range=[0, 100],
-                     plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                     yaxis=dict(gridcolor=P["grid"]))
+    fig = px.bar(
+        melted, x="Indicator", y="%", color="Market", barmode="group",
+        color_discrete_sequence=CHART_COLORS,
+        title="Circularity indicators (%)",
+    )
+    fig.update_layout(
+        height=440, yaxis_range=[0, 100],
+        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+        yaxis=dict(gridcolor=P["grid"]),
+    )
     st.plotly_chart(fig, use_container_width=True, key="circ_bars")
     st.dataframe(circ, use_container_width=True, hide_index=True)
 
@@ -679,21 +742,9 @@ with tabs[5]:
 # ============================================================
 with tabs[6]:
     st.subheader("Data-quality heat map")
-    st.caption("Every cell is Tier 3 (modeled). Use this to sequence the first data-collection wave.")
-    quality = pd.DataFrame(
-        {
-            "Hong Kong": ["Tier 3"] * 6 + ["Not included"],
-            "Singapore": ["Tier 3"] * 6 + ["Not included"],
-            "Korea":     ["Tier 3"] * 6 + ["Not included"],
-            "China":     ["Tier 3"] * 4 + ["Tier 3 (partial)"] + ["Tier 3"] * 2 + ["Not included"],
-        },
-        index=[
-            "Store electricity", "Refrigerants", "Fit-out embodied carbon",
-            "Seasonal builds / VM", "Waste", "Category 12 packaging EoL",
-            "Landlord-supplied energy",
-        ],
+    st.caption(
+        "Every cell is Tier 3 (modeled). Use this to sequence the first data-collection wave."
     )
-    # fix china row length
     quality = pd.DataFrame(
         {
             "Hong Kong": ["Tier 3", "Tier 3", "Tier 3", "Tier 3", "Tier 3", "Tier 3", "Not included"],
@@ -741,8 +792,7 @@ with tabs[7]:
 
 **Drivers modeled (10):**
 """ + "\n".join(
-        f"- **{d}** — {C.DRIVER_SCOPES[d]}"
-        for d in C.INITIATIVES.keys()
+        f"- **{d}** — {C.DRIVER_SCOPES[d]}" for d in C.INITIATIVES.keys()
     ) + """
 
 **Data status:** All figures are Tier 3 modeled estimates built from public benchmarks.
