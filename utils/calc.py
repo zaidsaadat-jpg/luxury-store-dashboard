@@ -3,7 +3,7 @@ from utils.constants import (
     REFRIGERANT_KG_PER_STORE, REFRIGERANT_GWP, FITOUT_INTENSITY,
     RENOVATION_CYCLE, SEASONAL_INTENSITY, SELLING_AREA_RATIO,
     FITOUT_WASTE_INTENSITY, MIXED_WASTE_EF_T_PER_TONNE, VM_REUSE,
-    INITIATIVES, COUNTRY_WEIGHTS, PLAN_TRAJECTORY,
+    INITIATIVES, COUNTRY_WEIGHTS, PLAN_TRAJECTORY, MONTHLY_PATTERNS,
     BASELINE_YEAR, TARGET_YEAR, BASELINE_TOTAL_TCO2E,
 )
 
@@ -52,9 +52,6 @@ def calc_waste_category5():
     return {m: (w[m] / 1000) * MIXED_WASTE_EF_T_PER_TONNE for m in MARKETS}
 
 
-# ============================================================
-# Trajectory helpers
-# ============================================================
 def country_factor(driver, countries):
     return sum(COUNTRY_WEIGHTS[driver].get(c, 0.0) for c in countries)
 
@@ -119,7 +116,7 @@ def plan_trajectory(countries):
 
 
 def monthly_driver_breakdown(year, countries):
-    """Return {driver: [tco2e per month]} for the selected year, scaled to selected markets."""
+    """Return {driver: [tco2e per month]} — seasonality-weighted."""
     result = {}
     for driver, yearly in INITIATIVES.items():
         if year not in yearly:
@@ -127,5 +124,7 @@ def monthly_driver_breakdown(year, countries):
         annual = yearly[year] * country_factor(driver, countries)
         if annual <= 0:
             continue
-        result[driver] = [annual / 12.0] * 12
+        pattern = MONTHLY_PATTERNS.get(driver, [1.0] * 12)
+        total = sum(pattern) or 12.0
+        result[driver] = [annual * p / total for p in pattern]
     return result
