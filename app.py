@@ -489,4 +489,267 @@ with tabs[1]:
             title=f"LCA stages — total {lca_df['tCO2e'].sum():,.0f} tCO₂e (baseline {C.BASELINE_YEAR})",
             xaxis_title="tCO₂e / yr",
             yaxis=dict(categoryorder="total ascending"),
-            plot_bgcolor="rgba(0,0,
+            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+        )
+        st.plotly_chart(fig, use_container_width=True, key="lca_bar")
+    with cB:
+        fig2 = px.treemap(
+            lca_df, path=["Stage"], values="tCO2e", color="tCO2e",
+            color_continuous_scale=[[0, "#EFEAE0"], [1, P["sage"]]],
+        )
+        fig2.update_layout(height=520, title="Share of baseline footprint", paper_bgcolor="rgba(0,0,0,0)")
+        st.plotly_chart(fig2, use_container_width=True, key="lca_tree")
+    st.dataframe(lca_df, use_container_width=True, hide_index=True)
+
+
+# ============================================================
+# Opportunity-matrix helper
+# ============================================================
+def render_opportunity_tab(opportunities, scope_area_key, title, intro):
+    st.subheader(title)
+    st.caption(intro)
+    st.markdown("#### 1. Full scope of items assessed")
+    scope_rows = []
+    for area_name, data in C.DRIVER_STRUCTURE[scope_area_key]["areas"].items():
+        for item, w in data["weights"].items():
+            scope_rows.append({
+                "Area of activity": area_name, "Specific item": item,
+                "Relative share": f"{w * 100:.0f}%",
+            })
+    st.dataframe(pd.DataFrame(scope_rows), use_container_width=True, hide_index=True)
+
+    st.markdown("#### 2. Initiatives matrix — effort vs impact (to 2035)")
+    opp_df = pd.DataFrame(
+        opportunities,
+        columns=["Initiative", "Impact (tCO2e by 2035)", "Effort (1–5)", "Status"],
+    )
+    status_colors = {"Acted": P["green"], "In progress": P["gold"], "Opportunity": P["oxblood"]}
+    c_a, c_b = st.columns([2, 1])
+    with c_a:
+        fig = px.scatter(
+            opp_df, x="Effort (1–5)", y="Impact (tCO2e by 2035)",
+            size="Impact (tCO2e by 2035)", color="Status",
+            color_discrete_map=status_colors, hover_name="Initiative",
+            title="Effort vs impact",
+        )
+        fig.update_layout(
+            height=480, plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(gridcolor=P["grid"]), yaxis=dict(gridcolor=P["grid"]),
+        )
+        fig.update_xaxes(range=[0, 5.5], tickmode="array", tickvals=[1, 2, 3, 4, 5])
+        st.plotly_chart(fig, use_container_width=True, key=f"opp_scatter_{scope_area_key}")
+    with c_b:
+        st.markdown("**Reading the matrix**")
+        st.markdown(
+            "- **Top-left** — do first\n"
+            "- **Top-right** — strategic bets\n"
+            "- **Bottom-left** — quick wins\n"
+            "- **Bottom-right** — deprioritize\n"
+        )
+        for status in ["Acted", "In progress", "Opportunity"]:
+            sub = opp_df[opp_df["Status"] == status]
+            st.metric(status, f"{sub['Impact (tCO2e by 2035)'].sum():,.0f} tCO₂e")
+    st.markdown("#### 3. Initiative detail")
+    st.dataframe(
+        opp_df.sort_values(["Status", "Impact (tCO2e by 2035)"], ascending=[True, False]),
+        use_container_width=True, hide_index=True,
+    )
+
+
+# ============================================================
+# TAB 3 — CAPITAL GOODS
+# ============================================================
+with tabs[2]:
+    render_opportunity_tab(
+        C.FITOUT_OPPORTUNITIES, "Circular fit-out redesign",
+        "Capital goods — boutique fit-out",
+        "Full scope of assessable items, then initiatives matrix (effort vs impact) to 2035.",
+    )
+    st.divider()
+    st.subheader("Modeled fit-out footprint by market")
+    fig = px.bar(
+        df, x="Market", y="Fit-out annualized (tCO2e)", color="Market",
+        color_discrete_sequence=CHART_COLORS, text_auto=".0f",
+        title="Annualized fit-out embodied carbon",
+    )
+    fig.update_layout(
+        showlegend=False, height=380,
+        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+        yaxis=dict(gridcolor=P["grid"]),
+    )
+    st.plotly_chart(fig, use_container_width=True, key="cap_market_bar")
+
+
+# ============================================================
+# TAB 4 — SEASONAL & VM
+# ============================================================
+with tabs[3]:
+    render_opportunity_tab(
+        C.SEASONAL_OPPORTUNITIES, "VM & seasonal reuse",
+        "Seasonal builds, visual merchandising and events",
+        "Highest-velocity carbon source. Full item scope first, then effort/impact matrix.",
+    )
+    st.divider()
+    st.subheader("Gross → avoided → memo net position")
+    gross = df["Seasonal/VM (tCO2e)"].sum()
+    avoid = df["Avoided emissions (tCO2e)"].sum()
+    bridge = go.Figure(go.Waterfall(
+        x=["Gross seasonal/VM", "Avoided (reuse)", "Memo net"],
+        y=[gross, -avoid, 0],
+        measure=["absolute", "relative", "total"],
+        text=[f"{gross:,.0f}", f"-{avoid:,.0f}", f"{gross - avoid:,.0f}"],
+        decreasing={"marker": {"color": P["gold"]}},
+        increasing={"marker": {"color": P["sage"]}},
+        totals={"marker": {"color": P["green"]}},
+        connector={"line": {"color": P["grey"]}},
+    ))
+    bridge.update_layout(
+        height=380, yaxis_title="tCO₂e / yr", showlegend=False,
+        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+        yaxis_gridcolor=P["grid"],
+    )
+    st.plotly_chart(bridge, use_container_width=True, key="vm_bridge")
+
+
+# ============================================================
+# TAB 5 — SCOPE 1+2
+# ============================================================
+with tabs[4]:
+    render_opportunity_tab(
+        C.ENERGY_OPPORTUNITIES, "Renewable electricity transition",
+        "Scope 1+2 — Operational energy and refrigerants",
+        "Full item scope first (energy end-uses, refrigerants), then effort/impact matrix.",
+    )
+    st.divider()
+    st.subheader("Modeled Scope 1+2 by market")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Electricity", f"{df['Electricity (MWh)'].sum():,.0f} MWh")
+    c2.metric("Scope 2", f"{df['Scope 2 (tCO2e)'].sum():,.0f} tCO₂e")
+    c3.metric("Scope 1 refrigerant", f"{df['Scope 1 refrigerant (tCO2e)'].sum():,.0f} tCO₂e")
+    c_a, c_b = st.columns(2)
+    with c_a:
+        fig = px.bar(df, x="Market", y="Scope 2 (tCO2e)", color="Market",
+                     color_discrete_sequence=CHART_COLORS, text_auto=".0f",
+                     title="Scope 2 (location-based)")
+        fig.update_layout(showlegend=False, height=380,
+                          plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                          yaxis=dict(gridcolor=P["grid"]))
+        st.plotly_chart(fig, use_container_width=True, key="scope2_bar")
+    with c_b:
+        fig = px.bar(df, x="Market", y="Scope 1 refrigerant (tCO2e)", color="Market",
+                     color_discrete_sequence=CHART_COLORS, text_auto=".1f",
+                     title="Scope 1 refrigerant")
+        fig.update_layout(showlegend=False, height=380,
+                          plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                          yaxis=dict(gridcolor=P["grid"]))
+        st.plotly_chart(fig, use_container_width=True, key="scope1_bar")
+
+
+# ============================================================
+# TAB 6 — CIRCULARITY & WASTE
+# ============================================================
+with tabs[5]:
+    render_opportunity_tab(
+        C.WASTE_OPPORTUNITIES, "Waste diversion",
+        "Circularity and end-of-life management",
+        "Full waste stream scope, circularity indicators, then effort/impact matrix.",
+    )
+    st.divider()
+    st.subheader("Circularity indicators by market (modeled)")
+    circ = pd.DataFrame({
+        "Market": C.MARKETS,
+        "Design-for-disassembly": [C.DESIGN_FOR_DISASSEMBLY[m] * 100 for m in C.MARKETS],
+        "Fixture reuse": [C.FIXTURE_REUSE[m] * 100 for m in C.MARKETS],
+        "VM reuse": [C.VM_REUSE[m] * 100 for m in C.MARKETS],
+        "Recycled content": [C.RECYCLED_CONTENT[m] * 100 for m in C.MARKETS],
+        "Waste diversion": [C.DIVERSION_RATE * 100 for _ in C.MARKETS],
+    })
+    melted = circ.melt(id_vars="Market", var_name="Indicator", value_name="%")
+    fig = px.bar(melted, x="Indicator", y="%", color="Market", barmode="group",
+                 color_discrete_sequence=CHART_COLORS, title="Circularity indicators (%)")
+    fig.update_layout(height=440, yaxis_range=[0, 100],
+                     plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                     yaxis=dict(gridcolor=P["grid"]))
+    st.plotly_chart(fig, use_container_width=True, key="circ_bars")
+    st.dataframe(circ, use_container_width=True, hide_index=True)
+
+
+# ============================================================
+# TAB 7 — DATA QUALITY
+# ============================================================
+with tabs[6]:
+    st.subheader("Data-quality heat map")
+    st.caption("Every cell is Tier 3 (modeled). Use this to sequence the first data-collection wave.")
+    quality = pd.DataFrame(
+        {
+            "Hong Kong": ["Tier 3"] * 6 + ["Not included"],
+            "Singapore": ["Tier 3"] * 6 + ["Not included"],
+            "Korea":     ["Tier 3"] * 6 + ["Not included"],
+            "China":     ["Tier 3"] * 4 + ["Tier 3 (partial)"] + ["Tier 3"] * 2 + ["Not included"],
+        },
+        index=[
+            "Store electricity", "Refrigerants", "Fit-out embodied carbon",
+            "Seasonal builds / VM", "Waste", "Category 12 packaging EoL",
+            "Landlord-supplied energy",
+        ],
+    )
+    # fix china row length
+    quality = pd.DataFrame(
+        {
+            "Hong Kong": ["Tier 3", "Tier 3", "Tier 3", "Tier 3", "Tier 3", "Tier 3", "Not included"],
+            "Singapore": ["Tier 3", "Tier 3", "Tier 3", "Tier 3", "Tier 3", "Tier 3", "Not included"],
+            "Korea":     ["Tier 3", "Tier 3", "Tier 3", "Tier 3", "Tier 3", "Tier 3", "Not included"],
+            "China":     ["Tier 3", "Tier 3", "Tier 3", "Tier 3 (partial)", "Tier 3", "Tier 3", "Not included"],
+        },
+        index=[
+            "Store electricity", "Refrigerants", "Fit-out embodied carbon",
+            "Seasonal builds / VM", "Waste", "Category 12 packaging EoL",
+            "Landlord-supplied energy",
+        ],
+    )
+    st.dataframe(quality, use_container_width=True)
+    st.markdown(
+        "- **Tier 1** — Physical, project-specific (BoQ + EPDs, utility invoices)\n"
+        "- **Tier 2** — Spend-based with physical overlays\n"
+        "- **Tier 3** — Typology/benchmark modeled estimate (this draft)"
+    )
+
+
+# ============================================================
+# TAB 8 — METHOD
+# ============================================================
+with tabs[7]:
+    st.subheader("About this draft")
+    st.markdown(f"""
+**Baseline framework:** 1.5°C-aligned retail pathway, {C.BASELINE_YEAR} base year.
+
+**Targets applied:** −50% by 2030 · −70% by {C.TARGET_YEAR} · −90% by {C.LONG_TERM_YEAR}
+
+**Boundary rules applied:**
+- Scope 1+2: operational control
+- Scope 3 Cat 2 (capital goods): capex ownership test
+- Landlord-owned fixtures: influence-gap memo, not Category 2
+- Avoided emissions: memo item, outside inventory boundary
+- Category 5 (store waste) and Category 12 (sold-product EoL) kept separate
+
+**Drill-down hierarchy (5 levels):**
+1. Driver / initiative
+2. Activity type (Scope 1+2, Capital goods, Seasonal/VM, Waste, Transport, Packaging)
+3. Country
+4. Area of activity
+5. Specific item
+
+**Drivers modeled (10):**
+""" + "\n".join(
+        f"- **{d}** — {C.DRIVER_SCOPES[d]}"
+        for d in C.INITIATIVES.keys()
+    ) + """
+
+**Data status:** All figures are Tier 3 modeled estimates built from public benchmarks.
+The dashboard is a frame for replacing estimates with store-level data — not a performance claim.
+""")
+
+st.caption(
+    "Built with Streamlit + Plotly. Free stack, public repo. "
+    "All figures modeled — replace before external use."
+)
