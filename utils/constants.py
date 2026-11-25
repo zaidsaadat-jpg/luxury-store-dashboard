@@ -24,9 +24,6 @@ FIXTURE_REUSE = {"Hong Kong": 0.20, "Singapore": 0.20, "Korea": 0.15, "China": 0
 VM_REUSE = {"Hong Kong": 0.40, "Singapore": 0.40, "Korea": 0.40, "China": 0.55}
 RECYCLED_CONTENT = {"Hong Kong": 0.15, "Singapore": 0.15, "Korea": 0.12, "China": 0.10}
 
-# ============================================================
-# Trajectory
-# ============================================================
 BASELINE_YEAR = 2021
 TARGET_YEAR = 2035
 LONG_TERM_YEAR = 2040
@@ -41,53 +38,50 @@ PLAN_TRAJECTORY = {
 }
 
 # ============================================================
-# Annual reductions by initiative (tCO2e saved in that year)
+# Annual reductions (new reductions achieved *in* that year)
+# Curves vary deliberately: front-loaded retrofits taper,
+# mid-decade fit-out wave peaks, back-loaded design builds up.
+# Cumulative to 2035: 8,070 tCO₂e → 2035 ≈ 1,930 tCO₂e
 # ============================================================
 INITIATIVES = {
-    "Renewable electricity transition": {
-        2023: 250, 2024: 350, 2025: 450, 2026: 500, 2027: 500,
-    },
     "Energy efficiency (LED/HVAC)": {
-        2022: 120, 2023: 130, 2024: 130, 2025: 130, 2026: 120,
-        2027: 100, 2028: 80, 2029: 60, 2030: 50,
+        2022: 100, 2023: 200, 2024: 250, 2025: 200, 2026: 100, 2027: 50,
+    },
+    "Renewable electricity transition": {
+        2023: 30, 2024: 100, 2025: 200, 2026: 300, 2027: 300, 2028: 200, 2029: 70,
     },
     "Refrigerant management": {
-        2022: 60, 2023: 60, 2024: 60, 2025: 50, 2026: 50, 2027: 40,
-        2028: 40, 2029: 30, 2030: 30, 2031: 20, 2032: 20,
+        2022: 20, 2023: 50, 2024: 80, 2025: 120, 2026: 120, 2027: 80, 2028: 30,
     },
     "Circular fit-out redesign": {
-        2023: 50, 2024: 100, 2025: 150, 2026: 180, 2027: 200,
-        2028: 220, 2029: 240, 2030: 250, 2031: 250, 2032: 250,
-        2033: 230, 2034: 230, 2035: 220,
+        2023: 20, 2024: 70, 2025: 150, 2026: 220, 2027: 280, 2028: 250,
+        2029: 200, 2030: 150, 2031: 100, 2032: 80, 2033: 60, 2034: 50, 2035: 40,
     },
     "VM & seasonal reuse": {
-        2022: 30, 2023: 40, 2024: 50, 2025: 55, 2026: 60, 2027: 60,
-        2028: 60, 2029: 55, 2030: 55, 2031: 50, 2032: 50, 2033: 45,
-        2034: 45, 2035: 45,
+        2022: 20, 2023: 40, 2024: 60, 2025: 80, 2026: 100, 2027: 120,
+        2028: 120, 2029: 120, 2030: 80, 2031: 60, 2032: 50, 2033: 40, 2034: 30, 2035: 20,
     },
     "Waste diversion": {
-        2023: 15, 2024: 20, 2025: 25, 2026: 25, 2027: 25, 2028: 20,
-        2029: 20, 2030: 15,
+        2023: 30, 2024: 50, 2025: 60, 2026: 50, 2027: 30,
     },
     "Logistics optimization": {
-        2024: 15, 2025: 20, 2026: 25, 2027: 30, 2028: 30,
-        2029: 30, 2030: 30, 2031: 25, 2032: 25, 2033: 20, 2034: 20, 2035: 20,
+        2024: 20, 2025: 40, 2026: 60, 2027: 90, 2028: 100, 2029: 100,
+        2030: 90, 2031: 80, 2032: 70, 2033: 60, 2034: 50, 2035: 40,
     },
     "Packaging circularity": {
-        2023: 10, 2024: 15, 2025: 20, 2026: 25, 2027: 25,
-        2028: 25, 2029: 25, 2030: 25, 2031: 20, 2032: 20, 2033: 20, 2034: 20, 2035: 20,
+        2023: 10, 2024: 30, 2025: 50, 2026: 60, 2027: 70, 2028: 60,
+        2029: 50, 2030: 40, 2031: 30, 2032: 20, 2033: 15, 2034: 10, 2035: 5,
     },
     "Modular & adaptable design": {
-        2024: 10, 2025: 20, 2026: 30, 2027: 35, 2028: 40,
-        2029: 40, 2030: 40, 2031: 35, 2032: 35, 2033: 30, 2034: 30, 2035: 30,
+        2024: 10, 2025: 30, 2026: 60, 2027: 90, 2028: 110, 2029: 120,
+        2030: 110, 2031: 90, 2032: 70, 2033: 50, 2034: 40, 2035: 30,
     },
     "Asset longevity & retention": {
-        2022: 5, 2023: 10, 2024: 15, 2025: 20, 2026: 25,
-        2027: 30, 2028: 30, 2029: 30, 2030: 30, 2031: 25, 2032: 25, 2033: 20, 2034: 20, 2035: 20,
+        2022: 40, 2023: 60, 2024: 60, 2025: 60, 2026: 60, 2027: 60,
+        2028: 50, 2029: 50, 2030: 40, 2031: 30, 2032: 25, 2033: 20, 2034: 15, 2035: 10,
     },
 }
 
-# Scope categorization for each driver
 DRIVER_SCOPES = {
     "Renewable electricity transition": "Scope 2",
     "Energy efficiency (LED/HVAC)": "Scope 1+2",
@@ -99,6 +93,36 @@ DRIVER_SCOPES = {
     "Packaging circularity": "Scope 3 · Cat 5/12",
     "Modular & adaptable design": "Scope 3 · Cat 2",
     "Asset longevity & retention": "Scope 3 · Cat 2",
+}
+
+# ============================================================
+# Scope glossary
+# ============================================================
+SCOPE_DEFINITIONS = {
+    "Scope 1": "Direct emissions from owned or controlled sources — on-site fuel combustion, refrigerant leakage.",
+    "Scope 2": "Indirect emissions from purchased electricity, heat, steam, or cooling.",
+    "Scope 1+2": "Combined direct (Scope 1) and energy-indirect (Scope 2) emissions.",
+    "Scope 3": "All other indirect value-chain emissions (15 categories upstream and downstream).",
+    "Scope 3 · Cat 2": "Category 2 — Capital goods. Upstream emissions from goods purchased or acquired for capital use: fixtures, fit-out materials, equipment, furniture.",
+    "Scope 3 · Cat 4/9": "Category 4 (upstream transportation & distribution) and Category 9 (downstream transportation & distribution) — freight, logistics, reverse logistics.",
+    "Scope 3 · Cat 5": "Category 5 — Waste generated in operations. Emissions from treatment and disposal of waste created by the company's own activities.",
+    "Scope 3 · Cat 5/12": "Category 5 (waste generated in operations) combined with Category 12 (end-of-life treatment of sold products) — e.g. packaging sent out with purchases.",
+}
+
+# ============================================================
+# Driver glossary
+# ============================================================
+DRIVER_DEFINITIONS = {
+    "Renewable electricity transition": "Switching boutique electricity from grid power to renewable sources (PPAs, green tariffs, on-site generation) to decarbonise Scope 2.",
+    "Energy efficiency (LED/HVAC)": "Reducing electricity consumption per m² through LED retrofit, HVAC optimisation, controls, and trading-hours scheduling.",
+    "Refrigerant management": "Preventing leaks of high-GWP refrigerants from HVAC and display fridges, and transitioning to lower-GWP alternatives (R-32, R-290).",
+    "Circular fit-out redesign": "Designing boutique interiors for reuse — disassembly, modularity, reclaimed materials — to cut the embodied carbon of each renovation cycle.",
+    "VM & seasonal reuse": "Reusing seasonal builds, props, mannequins and display kits across stores and seasons instead of commissioning new assets.",
+    "Waste diversion": "Segregating waste streams at store level and diverting fit-out, VM and packaging waste from landfill to reuse or recycling.",
+    "Logistics optimization": "Shifting freight modes (air → sea), consolidating shipments, and reducing reverse-logistics emissions from returns and take-back.",
+    "Packaging circularity": "Reducing packaging mass, using recycled content, and designing for reuse/recycling (including take-back at point of sale).",
+    "Modular & adaptable design": "Designing fixtures as interchangeable modules that can be reconfigured across seasons and stores rather than replaced.",
+    "Asset longevity & retention": "Extending the service life of fixtures and VM assets through refurbishment, repair, reupholstery, and cross-store transfers.",
 }
 
 COUNTRY_WEIGHTS = {
@@ -336,3 +360,18 @@ WASTE_OPPORTUNITIES = [
 ]
 
 MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+# Monthly seasonality factors per driver (normalized to 12 in calc.py)
+# Energy peaks in summer; VM peaks in SS/FW drops; logistics peaks Q4.
+MONTHLY_PATTERNS = {
+    "Energy efficiency (LED/HVAC)": [0.7, 0.7, 0.9, 1.1, 1.3, 1.5, 1.6, 1.5, 1.3, 1.0, 0.8, 0.6],
+    "Renewable electricity transition": [0.9, 0.9, 1.0, 1.0, 1.1, 1.2, 1.2, 1.2, 1.1, 1.0, 1.0, 0.9],
+    "Refrigerant management": [0.8, 0.8, 0.9, 1.0, 1.2, 1.4, 1.5, 1.4, 1.1, 0.9, 0.8, 0.7],
+    "Circular fit-out redesign": [1.0, 0.9, 1.1, 1.2, 1.2, 1.1, 0.9, 1.0, 1.1, 1.2, 1.2, 1.1],
+    "VM & seasonal reuse": [1.3, 1.2, 1.4, 1.2, 1.0, 0.9, 0.9, 1.0, 1.2, 1.3, 1.5, 1.3],
+    "Waste diversion": [1.1, 1.0, 0.9, 0.9, 1.0, 1.0, 1.0, 1.0, 1.1, 1.1, 1.1, 1.2],
+    "Logistics optimization": [0.7, 0.7, 0.8, 0.9, 1.0, 1.0, 1.0, 1.1, 1.2, 1.3, 1.5, 1.7],
+    "Packaging circularity": [1.0, 0.9, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.1, 1.2],
+    "Modular & adaptable design": [1.0] * 12,
+    "Asset longevity & retention": [1.0] * 12,
+}
