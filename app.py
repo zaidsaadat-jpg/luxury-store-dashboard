@@ -73,6 +73,45 @@ def _clicked_value(event, key, field="x"):
     return p.get(field) or p.get("label")
 
 
+def _clicked_pie_driver(event, key, c_df):
+    """
+    Robustly extract the selected driver from a pie click event.
+    Tries, in order: customdata → label → point_number lookup → point_index lookup.
+    """
+    pts = _get_selection(key)
+    if not pts and event is not None:
+        try:
+            sel = event.get("selection", {}) if isinstance(event, dict) else event.selection
+            pts = sel.get("points", []) if hasattr(sel, "get") else []
+        except Exception:
+            pts = []
+    if not pts:
+        return None
+    p = pts[0]
+
+    cd = p.get("customdata")
+    if isinstance(cd, (list, tuple)) and cd:
+        cd = cd[0]
+    if cd in C.INITIATIVES:
+        return cd
+
+    lbl = p.get("label")
+    if lbl in C.INITIATIVES:
+        return lbl
+
+    for idx_key in ("point_number", "point_index"):
+        idx = p.get(idx_key)
+        if isinstance(idx, int) and 0 <= idx < len(c_df):
+            try:
+                lbl2 = c_df.iloc[idx]["Driver"]
+                if lbl2 in C.INITIATIVES:
+                    return lbl2
+            except Exception:
+                pass
+
+    return None
+
+
 def _safe_plotly(fig, key, selection=True):
     try:
         if selection:
@@ -143,8 +182,7 @@ with st.sidebar:
     )
     st.caption(
         "Two views of the same result: the *annual snapshot* (tCO₂e avoided per year by 2035) "
-        "and the *cumulative integrated total* (sum of yearly avoided amounts). "
-        "Both are valid — the cumulative figure shows total impact since baseline."
+        "and the *cumulative integrated total* (sum of yearly avoided amounts)."
     )
     st.markdown("---")
     st.markdown("**Top reduction levers to 2035**")
@@ -188,7 +226,7 @@ tabs = st.tabs([
 with tabs[0]:
     st.subheader("Absolute emissions trajectory, 2021–2035")
     st.caption(
-        "Switch between three views of the same trajectory. Click a bar in the Trajectory view "
+        "Switch between three views. Click a bar in the Trajectory view "
         "to jump to monthly detail for that year."
     )
 
@@ -213,7 +251,6 @@ with tabs[0]:
     k4.metric("Variance vs plan", f"{var:+,.0f} tCO₂e")
     k5.metric("Reduction vs baseline", f"−{pct:.1f}%")
 
-    # ---------------- View mode selector ----------------
     if "view_mode" not in st.session_state:
         st.session_state.view_mode = "trajectory"
     if "detail_year" not in st.session_state:
@@ -228,7 +265,10 @@ with tabs[0]:
         st.session_state.pop("view_widget", None)
         st.session_state["_view_sync"] = st.session_state.view_mode
 
-    current_idx = mode_keys.index(st.session_state.view_mode) if st.session_state.view_mode in mode_keys else 0
+    current_idx = (
+        mode_keys.index(st.session_state.view_mode)
+        if st.session_state.view_mode in mode_keys else 0
+    )
 
     st.radio(
         "Chart view", mode_labels,
@@ -292,9 +332,9 @@ with tabs[0]:
         st.markdown("### Cumulative CO₂ avoided by driver, 2021–2035")
         st.caption(
             "Each band shows how much a driver has accumulated toward the cumulative total. "
-            "**Phasing to look for:** energy-efficiency retrofit dominates early years (2022–2025), "
-            "circular fit-out and renewable electricity build through the middle (2025–2029), "
-            "and logistics / modular design take over the late trajectory (2030–2035)."
+            "**Phasing:** energy-efficiency retrofit dominates early years (2022–2025); "
+            "circular fit-out and renewable electricity build through the middle (2025–2029); "
+            "logistics and modular design take over late (2030–2035)."
         )
 
         cum_by_driver_year = {}
@@ -310,13 +350,11 @@ with tabs[0]:
         total_per_driver = {d: cum_by_driver_year[d][C.TARGET_YEAR] for d in cum_by_driver_year}
         sorted_drivers_asc = sorted(total_per_driver, key=total_per_driver.get)
 
-        # Long-form dataframe for px.area
         long_rows = []
         for drv in sorted_drivers_asc:
             for y in years:
                 long_rows.append({
-                    "Year": y,
-                    "Driver": drv,
+                    "Year": y, "Driver": drv,
                     "Cumulative": cum_by_driver_year[drv][y],
                 })
         long_df = pd.DataFrame(long_rows)
@@ -371,9 +409,7 @@ with tabs[0]:
         st.markdown(f"#### {detail_year} — monthly reduction by initiative")
 
         if detail_year == C.BASELINE_YEAR:
-            st.info(
-                f"{detail_year} is the baseline year — no reductions to allocate across months."
-            )
+            st.info(f"{detail_year} is the baseline year — no reductions across months.")
         else:
             monthly = calc.monthly_driver_breakdown(detail_year, country_filter)
             if not monthly:
@@ -416,8 +452,7 @@ with tabs[0]:
                 )
                 _safe_plotly(fig_m, key="ov_monthly", selection=False)
                 st.caption(
-                    "Legend below the chart · "
-                    "Dotted line (right axis) = cumulative reduction across the year."
+                    "Legend below the chart · Dotted line (right axis) = cumulative reduction across the year."
                 )
 
                 year_drv = calc.year_drivers(detail_year, country_filter)
@@ -429,44 +464,72 @@ with tabs[0]:
                 st.markdown(f"**{detail_year} total: {ydf['tCO2e'].sum():,.1f} tCO₂e**")
                 st.dataframe(ydf, use_container_width=True, hide_index=True)
 
-    # ---------- Pie chart (full width, callout labels) ----------
+    # ---------- Pie chart (full width, callout labels, click-to-drill) ----------
     st.divider()
     st.markdown("### Cumulative contribution by initiative, 2021–2035")
     st.caption(
-        "Click a slice to drill into the country, area, and specific-item breakdown below. "
-        "The country and area charts split the same cumulative value shown in the slice."
+        "Click a slice (or use the selector below) to drill into the country, area, "
+        "and specific-item breakdown. The country and area charts split the same "
+        "cumulative value shown in the slice."
     )
     cum = calc.cumulative_by_driver(country_filter)
     c_df = pd.DataFrame(
         sorted(cum.items(), key=lambda x: -x[1]),
         columns=["Driver", "tCO2e"],
-    )
+    ).reset_index(drop=True)
 
     if "selected_initiative" not in st.session_state:
         st.session_state.selected_initiative = "— Select —"
 
-    fig_p = px.pie(
-        c_df, names="Driver", values="tCO2e", hole=0.45,
-        color="Driver", color_discrete_map=C.DRIVER_COLORS,
-    )
-    fig_p.update_traces(
+    # Sync widget state if changed externally (e.g. by a click)
+    if st.session_state.get("_last_pie_sync") != st.session_state.selected_initiative:
+        st.session_state.pop("pie_select", None)
+        st.session_state["_last_pie_sync"] = st.session_state.selected_initiative
+
+    # Explicit go.Pie with customdata so the driver name is ALWAYS in the click event
+    fig_p = go.Figure(data=[go.Pie(
+        labels=c_df["Driver"].tolist(),
+        values=c_df["tCO2e"].tolist(),
+        hole=0.45,
+        marker=dict(
+            colors=[C.DRIVER_COLORS[d] for d in c_df["Driver"]],
+            line=dict(color="white", width=2),
+        ),
+        customdata=c_df["Driver"].tolist(),
         textinfo="label+percent",
         textposition="outside",
         textfont=dict(size=11, color=P["ink"]),
-        marker=dict(line=dict(color="white", width=2)),
         hovertemplate="<b>%{label}</b><br>%{value:,.0f} tCO₂e (%{percent})<extra></extra>",
-        automargin=True,
-    )
+        sort=False,
+        direction="clockwise",
+    )])
     fig_p.update_layout(
         height=640,
         showlegend=False,
-        margin=dict(t=40, b=40, l=200, r=200),
+        margin=dict(t=40, b=40, l=220, r=220),
         paper_bgcolor="rgba(0,0,0,0)",
-        uniformtext=dict(mode="hide", minsize=9),
     )
     pie_event = _safe_plotly(fig_p, key="ov_pie")
 
-    clicked_drv = _clicked_value(pie_event, "ov_pie", field="label")
+    # Fallback selector — guaranteed drill-down even if click is missed
+    pie_selector_options = ["— Select —"] + c_df["Driver"].tolist()
+    default_idx = (
+        pie_selector_options.index(st.session_state.selected_initiative)
+        if st.session_state.selected_initiative in pie_selector_options else 0
+    )
+    st.selectbox(
+        "Or select a driver to drill down",
+        pie_selector_options,
+        index=default_idx,
+        key="pie_select",
+        on_change=lambda: st.session_state.update(
+            selected_initiative=st.session_state.pie_select,
+            _last_pie_sync=st.session_state.pie_select,
+        ),
+    )
+
+    # Click handler — runs after the widget renders so we can override
+    clicked_drv = _clicked_pie_driver(pie_event, "ov_pie", c_df)
     if clicked_drv in C.INITIATIVES and clicked_drv != st.session_state.selected_initiative:
         st.session_state.selected_initiative = clicked_drv
         st.rerun()
@@ -485,6 +548,7 @@ with tabs[0]:
         with btn_col:
             if st.button("Clear", key="clear_drill"):
                 st.session_state.selected_initiative = "— Select —"
+                st.session_state["_last_pie_sync"] = "— Select —"
                 st.rerun()
 
         st.markdown(
@@ -500,8 +564,8 @@ with tabs[0]:
 
         if drill_horizon == "Single year":
             default_yr = st.session_state.get("selected_year", C.TARGET_YEAR)
-            default_idx = years.index(default_yr) if default_yr in years else 0
-            drill_year = st.selectbox("Year", years, index=default_idx, key="drill_year")
+            default_idx_y = years.index(default_yr) if default_yr in years else 0
+            drill_year = st.selectbox("Year", years, index=default_idx_y, key="drill_year")
             dd = DD.drill_down(drill_year, selected_driver, country_filter)
             horizon_label = f"Year {drill_year}"
         else:
@@ -613,8 +677,8 @@ with tabs[0]:
                 )
     else:
         st.info(
-            "Click a slice of the pie to drill into the five-level breakdown "
-            "and see the driver definition."
+            "Click a slice of the pie (or use the selector above) to drill into "
+            "the five-level breakdown and see the driver definition."
         )
 
 
@@ -902,11 +966,11 @@ with tabs[7]:
 5. Specific item
 
 **Metric definitions:**
-- **Reduction vs baseline (2035)** — annual snapshot: how much lower the 2035 footprint is compared to the 2021 baseline. Used for target tracking.
-- **Cumulative CO₂ avoided (2021–2035)** — integrated total: the sum across all years of (baseline − projected). Shows the *stock* of avoided emissions since baseline. Not comparable to annual figures.
+- **Reduction vs baseline (2035)** — annual snapshot: how much lower the 2035 footprint is vs 2021 baseline.
+- **Cumulative CO₂ avoided (2021–2035)** — integrated total: sum across all years of (baseline − projected).
 
 **Chart views (Overview tab):**
-- **Trajectory** — annual emissions bars + plan line + tolerance band. Click any bar for monthly detail.
+- **Trajectory** — annual emissions bars + plan line. Click any bar for monthly detail.
 - **Cumulative by driver** — stacked area of cumulative avoided emissions; shows which drivers dominate early vs late.
 - **Monthly detail** — stacked bars by initiative for a single year, with cumulative line.
 """)
