@@ -128,3 +128,10 @@ def monthly_driver_breakdown(year, countries):
         total = sum(pattern) or 12.0
         result[driver] = [annual * p / total for p in pattern]
     return result
+
+def cumulative_avoided(countries):
+    """Sum of (baseline - emissions[y]) for all y — the integrated
+    area between the baseline line and the projected trajectory."""
+    emissions = scaled_annual_emissions(countries)
+    base = emissions[BASELINE_YEAR]
+    return sum(base - emissions[y] for y in emissions.keys())
