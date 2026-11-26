@@ -96,6 +96,24 @@ DRIVER_SCOPES = {
 }
 
 # ============================================================
+# Unique color per driver — Tableau 10 categorical palette,
+# ten visually distinct hues. Every chart uses this map so a
+# given driver is always the same colour across all views.
+# ============================================================
+DRIVER_COLORS = {
+    "Renewable electricity transition": "#4E79A7",  # blue
+    "Energy efficiency (LED/HVAC)": "#F28E2B",      # orange
+    "Refrigerant management": "#76B7B2",            # teal
+    "Circular fit-out redesign": "#59A14F",         # green
+    "VM & seasonal reuse": "#E15759",               # red
+    "Waste diversion": "#9C755F",                   # brown
+    "Logistics optimization": "#EDC948",            # yellow
+    "Packaging circularity": "#B07AA1",             # purple
+    "Modular & adaptable design": "#FF9DA7",        # pink
+    "Asset longevity & retention": "#BAB0AC",       # grey
+}
+
+# ============================================================
 # Scope glossary
 # ============================================================
 SCOPE_DEFINITIONS = {
