@@ -862,4 +862,213 @@ with tabs[3]:
     gross = df["Seasonal/VM (tCO2e)"].sum()
     avoid = df["Avoided emissions (tCO2e)"].sum()
     bridge = go.Figure(go.Waterfall(
-        x=["Gross
+        x=["Gross seasonal/VM", "Avoided (reuse)", "Memo net"],
+        y=[gross, -avoid, 0],
+        measure=["absolute", "relative", "total"],
+        text=[f"{gross:,.1f}", f"-{avoid:,.1f}", f"{gross - avoid:,.1f}"],
+        decreasing={"marker": {"color": P["gold"]}},
+        increasing={"marker": {"color": P["sage"]}},
+        totals={"marker": {"color": P["green"]}},
+        connector={"line": {"color": P["grey"]}},
+    ))
+    bridge.update_layout(
+        height=380, yaxis=dict(title="tCO₂e / yr", tickformat=".1f"),
+        showlegend=False,
+        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+        yaxis_gridcolor=P["grid"],
+    )
+    st.plotly_chart(bridge, use_container_width=True, key="vm_bridge")
+
+
+# ============================================================
+# TAB 5 — ENERGY & REFRIGERANTS
+# ============================================================
+with tabs[4]:
+    driver_pick = st.selectbox(
+        "Driver in this category",
+        ["Renewable electricity transition", "Energy efficiency (LED/HVAC)", "Refrigerant management"],
+        key="energy_driver_pick",
+    )
+    opp_map = {
+        "Renewable electricity transition": C.RENEWABLE_OPPORTUNITIES,
+        "Energy efficiency (LED/HVAC)": C.ENERGY_EFFICIENCY_OPPORTUNITIES,
+        "Refrigerant management": C.REFRIGERANT_OPPORTUNITIES,
+    }
+    render_opportunity_tab(
+        opp_map[driver_pick], driver_pick,
+        f"Scope 1+2 — {driver_pick}",
+        "Full item scope first (energy end-uses, refrigerants), then effort/impact matrix.",
+    )
+    st.divider()
+    st.subheader("Modeled Scope 1+2 by market")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Electricity", f"{df['Electricity (MWh)'].sum():,.1f} MWh")
+    c2.metric("Scope 2 (location-based)", f"{df['Scope 2 (tCO2e)'].sum():,.1f} tCO₂e")
+    c3.metric("Scope 1 refrigerant", f"{df['Scope 1 refrigerant (tCO2e)'].sum():,.1f} tCO₂e")
+    c_a, c_b = st.columns(2)
+    with c_a:
+        fig = px.bar(
+            df, x="Market", y="Scope 2 (tCO2e)", color="Market",
+            color_discrete_sequence=CHART_COLORS, text_auto=".1f",
+            title="Scope 2 (location-based)",
+        )
+        fig.update_layout(
+            showlegend=False, height=380,
+            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+            yaxis=dict(gridcolor=P["grid"], tickformat=".1f"),
+        )
+        st.plotly_chart(fig, use_container_width=True, key="scope2_bar")
+    with c_b:
+        fig = px.bar(
+            df, x="Market", y="Scope 1 refrigerant (tCO2e)", color="Market",
+            color_discrete_sequence=CHART_COLORS, text_auto=".1f",
+            title="Scope 1 refrigerant",
+        )
+        fig.update_layout(
+            showlegend=False, height=380,
+            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+            yaxis=dict(gridcolor=P["grid"], tickformat=".1f"),
+        )
+        st.plotly_chart(fig, use_container_width=True, key="scope1_bar")
+
+
+# ============================================================
+# TAB 6 — WASTE & PACKAGING
+# ============================================================
+with tabs[5]:
+    driver_pick = st.selectbox(
+        "Driver in this category",
+        ["Waste diversion", "Packaging circularity"],
+        key="waste_driver_pick",
+    )
+    opp_map = {
+        "Waste diversion": C.WASTE_OPPORTUNITIES,
+        "Packaging circularity": C.PACKAGING_OPPORTUNITIES,
+    }
+    render_opportunity_tab(
+        opp_map[driver_pick], driver_pick,
+        driver_pick,
+        "Full waste stream scope, circularity indicators, then effort/impact matrix.",
+    )
+    st.divider()
+    st.subheader("Circularity indicators by market (modeled)")
+    circ = pd.DataFrame({
+        "Market": C.MARKETS,
+        "Design-for-disassembly": [C.DESIGN_FOR_DISASSEMBLY[m] * 100 for m in C.MARKETS],
+        "Fixture reuse": [C.FIXTURE_REUSE[m] * 100 for m in C.MARKETS],
+        "VM reuse": [C.VM_REUSE[m] * 100 for m in C.MARKETS],
+        "Recycled content": [C.RECYCLED_CONTENT[m] * 100 for m in C.MARKETS],
+        "Waste diversion": [C.DIVERSION_RATE * 100 for _ in C.MARKETS],
+    })
+    melted = circ.melt(id_vars="Market", var_name="Indicator", value_name="%")
+    fig = px.bar(
+        melted, x="Indicator", y="%", color="Market", barmode="group",
+        color_discrete_sequence=CHART_COLORS,
+        title="Circularity indicators (%)",
+    )
+    fig.update_layout(
+        height=440, yaxis_range=[0, 100],
+        yaxis=dict(gridcolor=P["grid"], tickformat=".1f"),
+        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+    )
+    st.plotly_chart(fig, use_container_width=True, key="circ_bars")
+    st.dataframe(circ.round(1), use_container_width=True, hide_index=True)
+
+
+# ============================================================
+# TAB 7 — LOGISTICS OPTIMIZATION
+# ============================================================
+with tabs[6]:
+    render_opportunity_tab(
+        C.LOGISTICS_OPPORTUNITIES, "Logistics optimization",
+        "Logistics optimization",
+        "Full freight / reverse-logistics scope, then initiatives matrix (effort vs impact) to 2035.",
+    )
+
+
+# ============================================================
+# TAB 8 — DATA QUALITY
+# ============================================================
+with tabs[7]:
+    st.subheader("Data-quality heat map")
+    st.caption(
+        "Every cell is Tier 3 (modeled). Use this to sequence the first data-collection wave."
+    )
+    quality = pd.DataFrame(
+        {
+            "Hong Kong": ["Tier 3", "Tier 3", "Tier 3", "Tier 3", "Tier 3", "Tier 3", "Not included"],
+            "Singapore": ["Tier 3", "Tier 3", "Tier 3", "Tier 3", "Tier 3", "Tier 3", "Not included"],
+            "Korea":     ["Tier 3", "Tier 3", "Tier 3", "Tier 3", "Tier 3", "Tier 3", "Not included"],
+            "China":     ["Tier 3", "Tier 3", "Tier 3", "Tier 3 (partial)", "Tier 3", "Tier 3", "Not included"],
+        },
+        index=[
+            "Store electricity", "Refrigerants", "Fit-out embodied carbon",
+            "Seasonal builds / VM", "Waste", "Category 12 packaging EoL",
+            "Landlord-supplied energy",
+        ],
+    )
+    st.dataframe(quality, use_container_width=True)
+    st.markdown(
+        "- **Tier 1** — Physical, project-specific (BoQ + EPDs, utility invoices)\n"
+        "- **Tier 2** — Spend-based with physical overlays\n"
+        "- **Tier 3** — Typology/benchmark modeled estimate (this draft)"
+    )
+
+
+# ============================================================
+# TAB 9 — METHOD
+# ============================================================
+with tabs[8]:
+    st.subheader("About this draft")
+    st.markdown(f"""
+**Baseline framework:** 1.5°C-aligned retail pathway, {C.BASELINE_YEAR} base year.
+
+**Targets applied:** −50% by 2030 · −70% by {C.TARGET_YEAR} · −90% by {C.LONG_TERM_YEAR}
+
+**Boundary rules applied:**
+- Scope 1+2: operational control
+- Scope 3 Cat 2 (capital goods): capex ownership test
+- Landlord-owned fixtures: influence-gap memo, not Category 2
+- Avoided emissions: memo item, outside inventory boundary
+- Category 5 (store waste) and Category 12 (sold-product EoL) kept separate
+
+**Drill-down hierarchy (5 levels):**
+1. Driver / initiative
+2. Activity type (Scope 1+2, Capital goods, Seasonal/VM, Waste, Transport, Packaging)
+3. Country
+4. Area of activity
+5. Specific item
+
+**Additional view: Strategy attribution.** Within a driver's drill-down, the total is also split across strategic levers (e.g. design for disassembly, modularity, recycled materials). This is a strategic cross-cut, not a strict hierarchy — a lever can touch multiple areas of activity, so weights are modeled planning assumptions.
+
+**Metric definitions:**
+- **Reduction vs baseline (2035)** — annual snapshot: how much lower the 2035 footprint is vs 2021 baseline.
+- **Cumulative CO₂ avoided (2021–2035)** — integrated total: sum across all years of (baseline − projected).
+
+**Chart views (Overview tab):**
+- **Trajectory** — annual emissions bars + plan line. Click any bar for monthly detail.
+- **Cumulative by driver** — stacked area of cumulative avoided emissions; shows which drivers dominate early vs late.
+- **Monthly detail** — stacked bars by initiative for a single year, with cumulative line.
+
+**Tab guide:**
+- **Circular fit-out redesign** — Circular fit-out + Modular & adaptable design + Asset longevity (all Scope 3 Cat 2)
+- **VM & seasonal reuse** — Seasonal / visual merchandising assets
+- **Energy & refrigerants** — Renewable electricity + Energy efficiency + Refrigerant management (Scope 1+2)
+- **Waste & packaging** — Waste diversion + Packaging circularity (Scope 3 Cat 5/12)
+- **Logistics optimization** — Freight, transfers, reverse logistics (Scope 3 Cat 4/9)
+""")
+    st.markdown("### Scope glossary")
+    for scope, definition in C.SCOPE_DEFINITIONS.items():
+        st.markdown(f"**{scope}** — {definition}")
+
+    st.markdown("### Driver glossary")
+    for driver, definition in C.DRIVER_DEFINITIONS.items():
+        scope = C.DRIVER_SCOPES.get(driver, "")
+        st.markdown(f"**{driver}** *({scope})* — {definition}")
+
+    st.markdown("**Data status:** All figures are Tier 3 modeled estimates built from public benchmarks.")
+
+st.caption(
+    "Built with Streamlit + Plotly. Free stack, public repo. "
+    "All figures modeled — replace before external use."
+)
