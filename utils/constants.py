@@ -29,7 +29,6 @@ TARGET_YEAR = 2035
 LONG_TERM_YEAR = 2040
 BASELINE_TOTAL_TCO2E = 10000.0
 
-# Planned trajectory — piecewise linear between anchors
 PLAN_TRAJECTORY = {
     2021: 10000.0,
     2025: 7500.0,
@@ -37,12 +36,6 @@ PLAN_TRAJECTORY = {
     2035: 2000.0,
 }
 
-# ============================================================
-# Annual reductions (new reductions achieved *in* that year)
-# Curves vary deliberately: front-loaded retrofits taper,
-# mid-decade fit-out wave peaks, back-loaded design builds up.
-# Cumulative to 2035: 8,070 tCO₂e → 2035 ≈ 1,930 tCO₂e
-# ============================================================
 INITIATIVES = {
     "Energy efficiency (LED/HVAC)": {
         2022: 100, 2023: 200, 2024: 250, 2025: 200, 2026: 100, 2027: 50,
@@ -95,27 +88,19 @@ DRIVER_SCOPES = {
     "Asset longevity & retention": "Scope 3 · Cat 2",
 }
 
-# ============================================================
-# Unique color per driver — Tableau 10 categorical palette,
-# ten visually distinct hues. Every chart uses this map so a
-# given driver is always the same colour across all views.
-# ============================================================
 DRIVER_COLORS = {
-    "Renewable electricity transition": "#4E79A7",  # blue
-    "Energy efficiency (LED/HVAC)": "#F28E2B",      # orange
-    "Refrigerant management": "#76B7B2",            # teal
-    "Circular fit-out redesign": "#59A14F",         # green
-    "VM & seasonal reuse": "#E15759",               # red
-    "Waste diversion": "#9C755F",                   # brown
-    "Logistics optimization": "#EDC948",            # yellow
-    "Packaging circularity": "#B07AA1",             # purple
-    "Modular & adaptable design": "#FF9DA7",        # pink
-    "Asset longevity & retention": "#BAB0AC",       # grey
+    "Renewable electricity transition": "#4E79A7",
+    "Energy efficiency (LED/HVAC)": "#F28E2B",
+    "Refrigerant management": "#76B7B2",
+    "Circular fit-out redesign": "#59A14F",
+    "VM & seasonal reuse": "#E15759",
+    "Waste diversion": "#9C755F",
+    "Logistics optimization": "#EDC948",
+    "Packaging circularity": "#B07AA1",
+    "Modular & adaptable design": "#FF9DA7",
+    "Asset longevity & retention": "#BAB0AC",
 }
 
-# ============================================================
-# Scope glossary
-# ============================================================
 SCOPE_DEFINITIONS = {
     "Scope 1": "Direct emissions from owned or controlled sources — on-site fuel combustion, refrigerant leakage.",
     "Scope 2": "Indirect emissions from purchased electricity, heat, steam, or cooling.",
@@ -127,9 +112,6 @@ SCOPE_DEFINITIONS = {
     "Scope 3 · Cat 5/12": "Category 5 (waste generated in operations) combined with Category 12 (end-of-life treatment of sold products) — e.g. packaging sent out with purchases.",
 }
 
-# ============================================================
-# Driver glossary
-# ============================================================
 DRIVER_DEFINITIONS = {
     "Renewable electricity transition": "Switching boutique electricity from grid power to renewable sources (PPAs, green tariffs, on-site generation) to decarbonise Scope 2.",
     "Energy efficiency (LED/HVAC)": "Reducing electricity consumption per m² through LED retrofit, HVAC optimisation, controls, and trading-hours scheduling.",
@@ -141,6 +123,78 @@ DRIVER_DEFINITIONS = {
     "Packaging circularity": "Reducing packaging mass, using recycled content, and designing for reuse/recycling (including take-back at point of sale).",
     "Modular & adaptable design": "Designing fixtures as interchangeable modules that can be reconfigured across seasons and stores rather than replaced.",
     "Asset longevity & retention": "Extending the service life of fixtures and VM assets through refurbishment, repair, reupholstery, and cross-store transfers.",
+}
+
+# ============================================================
+# Strategy / action plan attribution per driver
+# Each driver's total is split across strategic levers by weight.
+# Weights are modeled planning assumptions — a strategy can touch
+# multiple areas of activity, so this is an attribution, not a
+# strict hierarchy split.
+# ============================================================
+ACTION_PLANS = {
+    "Circular fit-out redesign": {
+        "Design for disassembly (screws vs glue)": 0.30,
+        "Modular & reconfigurable fixtures": 0.25,
+        "Recycled / reclaimed materials": 0.20,
+        "Low-carbon material substitution": 0.15,
+        "Local / regional sourcing": 0.10,
+    },
+    "VM & seasonal reuse": {
+        "Reusable display structures": 0.30,
+        "Standardized kits across stores": 0.25,
+        "Refurbishment of props & mannequins": 0.20,
+        "Digital signage replacing print": 0.15,
+        "Cross-season / cross-city reuse": 0.10,
+    },
+    "Renewable electricity transition": {
+        "Corporate power purchase agreements": 0.40,
+        "Unbundled RECs / green tariffs": 0.35,
+        "On-site solar generation": 0.15,
+        "Landlord renewable provision": 0.10,
+    },
+    "Energy efficiency (LED/HVAC)": {
+        "LED base lighting retrofit": 0.30,
+        "LED display & track lighting": 0.25,
+        "HVAC controls & scheduling": 0.20,
+        "Chiller / AHU equipment upgrades": 0.15,
+        "Sub-metering & monitoring": 0.10,
+    },
+    "Refrigerant management": {
+        "Leak detection & preventive maintenance": 0.40,
+        "Low-GWP refrigerant transition": 0.40,
+        "Equipment replacement cycle": 0.20,
+    },
+    "Waste diversion": {
+        "Segregated recycling streams": 0.35,
+        "Take-back schemes (fixtures, packaging)": 0.30,
+        "Reuse / donation programmes": 0.20,
+        "Composting / energy recovery": 0.15,
+    },
+    "Logistics optimization": {
+        "Modal shift air → sea freight": 0.40,
+        "Shipment consolidation & load optimization": 0.25,
+        "Reverse logistics network redesign": 0.20,
+        "Regional / local supplier proximity": 0.15,
+    },
+    "Packaging circularity": {
+        "Reduce packaging mass": 0.30,
+        "Recycled / certified content": 0.30,
+        "Reusable packaging (bags, boxes)": 0.25,
+        "Take-back at point of sale": 0.15,
+    },
+    "Modular & adaptable design": {
+        "Interchangeable wall & display panels": 0.35,
+        "Standard shelving modules": 0.30,
+        "Demountable partition systems": 0.25,
+        "Flexible display tables": 0.10,
+    },
+    "Asset longevity & retention": {
+        "Fixture refurbishment programme": 0.35,
+        "Reupholstery & repair": 0.25,
+        "Cross-store fixture transfers": 0.25,
+        "Long-term maintenance contracts": 0.15,
+    },
 }
 
 COUNTRY_WEIGHTS = {
@@ -337,50 +391,91 @@ LCA_STAGES = {
 }
 
 FITOUT_OPPORTUNITIES = [
-    ("Design for disassembly (screws, not glue)", 600, 4, "Opportunity"),
-    ("Modular millwork design", 450, 3, "In progress"),
-    ("Reusable modular partitions", 300, 3, "Opportunity"),
-    ("Take-back scheme for fixtures", 250, 4, "Opportunity"),
-    ("Reclaimed timber sourcing", 200, 2, "Acted"),
-    ("Low-carbon concrete / stone alternatives", 180, 3, "Opportunity"),
-    ("Local supplier sourcing (Asia-based mills)", 150, 2, "In progress"),
-    ("LED retrofit + controls", 120, 1, "Acted"),
-    ("Recyclable mannequins (recycled polystyrene)", 80, 1, "Acted"),
-    ("Material passport for top 20 SKUs", 50, 2, "Opportunity"),
+    ("Design for disassembly (screws, not glue)", 600.0, 4, "Opportunity"),
+    ("Modular millwork design", 450.0, 3, "In progress"),
+    ("Reusable modular partitions", 300.0, 3, "Opportunity"),
+    ("Take-back scheme for fixtures", 250.0, 4, "Opportunity"),
+    ("Reclaimed timber sourcing", 200.0, 2, "Acted"),
+    ("Low-carbon concrete / stone alternatives", 180.0, 3, "Opportunity"),
+    ("Local supplier sourcing (Asia-based mills)", 150.0, 2, "In progress"),
+    ("LED retrofit + controls", 120.0, 1, "Acted"),
+    ("Recyclable mannequins (recycled polystyrene)", 80.0, 1, "Acted"),
+    ("Material passport for top 20 SKUs", 50.0, 2, "Opportunity"),
 ]
 
 SEASONAL_OPPORTUNITIES = [
-    ("Standardized reusable VM kits", 120, 2, "In progress"),
-    ("Multi-city event set reuse", 100, 2, "Acted"),
-    ("Recycled polystyrene mannequins", 60, 1, "Acted"),
-    ("Digital signage replacing printed graphics", 80, 2, "Opportunity"),
-    ("Reusable window display structures", 70, 3, "Opportunity"),
-    ("Return-and-refurbish scheme for props", 50, 3, "Opportunity"),
-    ("Fabric banner reuse program", 30, 1, "In progress"),
+    ("Standardized reusable VM kits", 120.0, 2, "In progress"),
+    ("Multi-city event set reuse", 100.0, 2, "Acted"),
+    ("Recycled polystyrene mannequins", 60.0, 1, "Acted"),
+    ("Digital signage replacing printed graphics", 80.0, 2, "Opportunity"),
+    ("Reusable window display structures", 70.0, 3, "Opportunity"),
+    ("Return-and-refurbish scheme for props", 50.0, 3, "Opportunity"),
+    ("Fabric banner reuse program", 30.0, 1, "In progress"),
 ]
 
-ENERGY_OPPORTUNITIES = [
-    ("Renewable electricity (RE100 trajectory)", 500, 3, "In progress"),
-    ("Refrigerant transition to low-GWP (R-32, R-290)", 180, 3, "Opportunity"),
-    ("HVAC controls optimization", 120, 2, "In progress"),
-    ("LED display lighting retrofit", 90, 1, "Acted"),
-    ("Sub-metering for landlord-supplied energy", 60, 2, "Opportunity"),
-    ("Trading-hours-based HVAC scheduling", 70, 1, "Acted"),
-    ("Predictive maintenance for chillers", 40, 2, "Opportunity"),
+RENEWABLE_OPPORTUNITIES = [
+    ("Corporate power purchase agreements", 200.0, 3, "In progress"),
+    ("Unbundled RECs / green tariffs", 180.0, 2, "Acted"),
+    ("On-site solar (where viable)", 80.0, 4, "Opportunity"),
+    ("Landlord renewable provision (green lease)", 40.0, 3, "Opportunity"),
+]
+
+ENERGY_EFFICIENCY_OPPORTUNITIES = [
+    ("LED base lighting retrofit", 60.0, 1, "Acted"),
+    ("LED display & track lighting", 50.0, 1, "Acted"),
+    ("HVAC controls & scheduling", 40.0, 2, "In progress"),
+    ("Chiller / AHU equipment upgrades", 30.0, 3, "Opportunity"),
+    ("Sub-metering & monitoring", 20.0, 2, "In progress"),
+]
+
+REFRIGERANT_OPPORTUNITIES = [
+    ("Leak detection & preventive maintenance", 70.0, 2, "In progress"),
+    ("Low-GWP refrigerant transition (R-32, R-290)", 70.0, 3, "Opportunity"),
+    ("Equipment replacement cycle", 40.0, 3, "Opportunity"),
 ]
 
 WASTE_OPPORTUNITIES = [
-    ("Fixture take-back & reuse program", 100, 3, "Opportunity"),
-    ("Segregated waste streams at store level", 60, 2, "In progress"),
-    ("Packaging take-back at point of sale", 50, 3, "Opportunity"),
-    ("Mannequin refurbishment scheme", 40, 2, "Opportunity"),
-    ("Local recycling partner network", 30, 2, "In progress"),
+    ("Fixture take-back & reuse programme", 100.0, 3, "Opportunity"),
+    ("Segregated waste streams at store level", 60.0, 2, "In progress"),
+    ("Mannequin refurbishment scheme", 40.0, 2, "Opportunity"),
+    ("Local recycling partner network", 30.0, 2, "In progress"),
+]
+
+PACKAGING_OPPORTUNITIES = [
+    ("Reduce packaging mass (thinner bags, boxes)", 60.0, 1, "In progress"),
+    ("Recycled / FSC-certified content", 50.0, 2, "Acted"),
+    ("Reusable shopping bags / boxes", 40.0, 2, "In progress"),
+    ("Packaging take-back at point of sale", 30.0, 3, "Opportunity"),
+    ("Digital receipts & documentation", 10.0, 1, "Acted"),
+]
+
+MODULAR_OPPORTUNITIES = [
+    ("Interchangeable wall / display panels", 180.0, 3, "In progress"),
+    ("Standard shelving modules (cross-store)", 150.0, 2, "Acted"),
+    ("Demountable partition systems", 120.0, 3, "Opportunity"),
+    ("Flexible display tables (configurable)", 60.0, 2, "In progress"),
+    ("Tool-free assembly fixtures", 40.0, 3, "Opportunity"),
+]
+
+LONGEVITY_OPPORTUNITIES = [
+    ("Fixture refurbishment programme", 90.0, 2, "In progress"),
+    ("Reupholstery & repair (vs replacement)", 60.0, 2, "Acted"),
+    ("Cross-store fixture transfers", 60.0, 2, "In progress"),
+    ("Long-term maintenance contracts", 40.0, 1, "Acted"),
+    ("Take-back at end of first life", 30.0, 3, "Opportunity"),
+]
+
+LOGISTICS_OPPORTUNITIES = [
+    ("Modal shift air → sea freight", 120.0, 4, "Opportunity"),
+    ("Shipment consolidation & load optimization", 80.0, 2, "In progress"),
+    ("Regional / local supplier proximity", 60.0, 2, "Acted"),
+    ("Reverse logistics network redesign", 50.0, 3, "Opportunity"),
+    ("Store-to-store transfer optimization", 40.0, 2, "In progress"),
+    ("Low-carbon last-mile (electric vehicles)", 30.0, 4, "Opportunity"),
 ]
 
 MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
-# Monthly seasonality factors per driver (normalized to 12 in calc.py)
-# Energy peaks in summer; VM peaks in SS/FW drops; logistics peaks Q4.
 MONTHLY_PATTERNS = {
     "Energy efficiency (LED/HVAC)": [0.7, 0.7, 0.9, 1.1, 1.3, 1.5, 1.6, 1.5, 1.3, 1.0, 0.8, 0.6],
     "Renewable electricity transition": [0.9, 0.9, 1.0, 1.0, 1.1, 1.2, 1.2, 1.2, 1.1, 1.0, 1.0, 0.9],
