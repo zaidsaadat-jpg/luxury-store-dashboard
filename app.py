@@ -53,7 +53,8 @@ st.markdown(
     .vc-stage .desc { font-size: 0.78rem; color: #5A4A3A; margin-bottom: 8px; }
     .vc-stage .metric { font-size: 1.05rem; color: #1F1F1F; font-weight: 600; }
     .vc-stage .sub { font-size: 0.72rem; color: #6B6B6B; }
-    .vc-stage .driver { font-size: 0.75rem; color: #6B6B6B; margin-top: 8px; font-style: italic; }
+    .vc-stage .driver { font-size: 0.72rem; color: #5A4A3A; margin-top: 8px; }
+    .vc-stage .driver b { color: #1F1F1F; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -154,62 +155,39 @@ df = pd.DataFrame({
 df["Scope 1+2 total"] = df["Scope 2 (tCO2e)"] + df["Scope 1 refrigerant (tCO2e)"]
 
 # ---------------- Value-chain stage mapping ----------------
-# Maps LCA stage → value-chain broad category → drivers relevant to that stage.
 VALUE_CHAIN = [
     {
         "id": "design",
         "title": "Design & specification",
-        "desc": "Store concept, fixture specification, material selection, and design-for-disassembly decisions made before procurement.",
+        "desc": "Concept, fixture specification, material selection, design-for-disassembly decisions before procurement.",
         "lca_stages": ["Raw material extraction"],
-        "drivers": ["Circular fit-out redesign", "Modular & adaptable design",
-                    "Asset longevity & retention", "Packaging circularity"],
     },
     {
         "id": "production",
         "title": "Materials & production",
-        "desc": "Upstream manufacturing of fixtures, furniture, mannequins, and packaging; the cradle-to-gate footprint of goods purchased.",
+        "desc": "Upstream manufacturing of fixtures, furniture, mannequins, and packaging.",
         "lca_stages": ["Manufacturing / production"],
-        "drivers": ["Circular fit-out redesign", "Modular & adaptable design",
-                    "Asset longevity & retention", "Packaging circularity",
-                    "VM & seasonal reuse"],
     },
     {
         "id": "logistics",
         "title": "Logistics & installation",
-        "desc": "Inbound freight, store installation, store-to-store transfers, and reverse logistics.",
+        "desc": "Inbound freight, installation, store-to-store transfers, and reverse logistics.",
         "lca_stages": ["Transport & distribution"],
-        "drivers": ["Logistics optimization"],
     },
     {
         "id": "operations",
         "title": "Store operations",
-        "desc": "Electricity use, refrigerant leakage, and seasonal VM refreshes while the store is trading.",
+        "desc": "Electricity, refrigerant leakage, seasonal refreshes, and maintenance.",
         "lca_stages": ["Operations (energy & refrigerants)", "Seasonal / VM refresh",
-                       "Maintenance & repair"],
-        "drivers": ["Renewable electricity transition", "Energy efficiency (LED/HVAC)",
-                    "Refrigerant management", "VM & seasonal reuse"],
+                       "Maintenance & repair", "Store fit-out & construction"],
     },
     {
         "id": "eol",
         "title": "End of life",
-        "desc": "Waste diversion, take-back schemes, recycling, and end-of-life treatment of sold products and packaging.",
-        "lca_stages": ["Store fit-out & construction", "End of life (waste, take-back)"],
-        "drivers": ["Waste diversion", "Packaging circularity", "Asset longevity & retention"],
+        "desc": "Waste diversion, take-back, recycling, end-of-life of sold products and packaging.",
+        "lca_stages": ["End of life (waste, take-back)"],
     },
 ]
-
-# ---------------- Exec summary data ----------------
-all_em = calc.scaled_annual_emissions(C.MARKETS)
-all_plan = calc.plan_trajectory(C.MARKETS)
-all_cum = calc.cumulative_by_driver(C.MARKETS)
-all_cum_avoided = calc.cumulative_avoided(C.MARKETS)
-top_3 = sorted(all_cum.items(), key=lambda x: -x[1])[:3]
-base_v = all_em[C.BASELINE_YEAR]
-end_v = all_em[C.TARGET_YEAR]
-plan_v = all_plan[C.TARGET_YEAR]
-var = end_v - plan_v
-red_pct = (1 - end_v / base_v) * 100 if base_v else 0.0
-var_class = "variance-neg" if var <= 0 else "variance-pos"
 
 # ---------------- Header ----------------
 st.title("Luxury Store CO₂ Reduction Dashboard")
@@ -220,118 +198,170 @@ st.caption(
 st.divider()
 
 tabs = st.tabs([
-    "Overview",
-    "LCA Index",
-    "Circular fit-out redesign",
-    "VM & seasonal reuse",
-    "Energy & refrigerants",
-    "Waste & packaging",
-    "Logistics optimization",
-    "Data Quality",
-    "Method",
+    "Overview", "LCA Index", "Circular fit-out redesign", "VM & seasonal reuse",
+    "Energy & refrigerants", "Waste & packaging", "Logistics optimization",
+    "Data Quality", "Method",
 ])
 
-# Determine active tab via query param (fallback for exec summary)
 if "active_tab" not in st.session_state:
     st.session_state.active_tab = "Overview"
 
-# ---------------- Sidebar ----------------
-with st.sidebar:
-    st.markdown("### Executive summary")
-    st.caption(f"Viewing: **{st.session_state.active_tab}**")
 
-    if st.session_state.active_tab == "Overview":
-        st.markdown(
-            f'<div class="exec-summary">'
-            f'<b>Baseline ({C.BASELINE_YEAR}):</b> {base_v:,.1f} tCO₂e<br>'
-            f'<b>{C.TARGET_YEAR} projected:</b> {end_v:,.1f} tCO₂e<br>'
-            f'<b>{C.TARGET_YEAR} plan:</b> {plan_v:,.1f} tCO₂e<br>'
-            f'<b>Variance vs plan:</b> <span class="{var_class}">{var:+,.1f} tCO₂e</span><br>'
-            f'<b>Reduction vs baseline:</b> −{red_pct:.1f}%<br>'
-            f'<b>Cumulative CO₂ avoided:</b> '
-            f'<span class="cum-avoided">{all_cum_avoided:,.1f} tCO₂e</span>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-        st.markdown("---")
-        st.markdown("**Top 3 levers to 2035**")
-        for i, (drv, val) in enumerate(top_3, start=1):
-            scope = C.DRIVER_SCOPES.get(drv, "")
+# ---------------- Exec summary ----------------
+def render_exec_summary():
+    tab = st.session_state.active_tab
+    with st.sidebar:
+        st.markdown("### Executive summary")
+        st.caption(f"Viewing: **{tab}**")
+
+        if tab == "Overview":
+            countries = st.session_state.get("countries", C.MARKETS) or C.MARKETS
+            em = calc.scaled_annual_emissions(countries)
+            pl = calc.plan_trajectory(countries)
+            cum_av = calc.cumulative_avoided(countries)
+            b = em[C.BASELINE_YEAR]
+            e = em[C.TARGET_YEAR]
+            p = pl[C.TARGET_YEAR]
+            v = e - p
+            pct = (1 - e / b) * 100 if b else 0
+            vcls = "variance-neg" if v <= 0 else "variance-pos"
             st.markdown(
-                f"{i}. **{drv}** — {val:,.1f} tCO₂e  \n"
-                f"&nbsp;&nbsp;<span style='color:#8A8A8A;font-size:0.78rem;'>{scope}</span>",
+                f'<div class="exec-summary">'
+                f'<b>Baseline ({C.BASELINE_YEAR}):</b> {b:,.1f} tCO₂e<br>'
+                f'<b>{C.TARGET_YEAR} projected:</b> {e:,.1f} tCO₂e<br>'
+                f'<b>{C.TARGET_YEAR} plan:</b> {p:,.1f} tCO₂e<br>'
+                f'<b>Variance vs plan:</b> <span class="{vcls}">{v:+,.1f} tCO₂e</span><br>'
+                f'<b>Reduction vs baseline:</b> −{pct:.1f}%<br>'
+                f'<b>Cumulative CO₂ avoided:</b> '
+                f'<span class="cum-avoided">{cum_av:,.1f} tCO₂e</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown("---")
+            top = sorted(
+                ((d, calc.cumulative_by_driver(countries).get(d, 0))
+                 for d in C.INITIATIVES), key=lambda x: -x[1]
+            )[:3]
+            st.markdown("**Top 3 levers to 2035**")
+            for i, (d, v2) in enumerate(top, start=1):
+                scope = C.DRIVER_SCOPES.get(d, "")
+                st.markdown(
+                    f"{i}. **{d}** — {v2:,.1f} tCO₂e  \n"
+                    f"&nbsp;&nbsp;<span style='color:#8A8A8A;font-size:0.78rem;'>{scope}</span>",
+                    unsafe_allow_html=True,
+                )
+
+        elif tab == "LCA Index":
+            countries = st.session_state.get("lca_countries", C.MARKETS) or C.MARKETS
+            cov = calc.coverage_factor(countries)
+            stage_base = {k: v * cov for k, v in C.LCA_STAGES.items()}
+            total = sum(stage_base.values())
+            biggest = max(stage_base.items(), key=lambda x: x[1])
+            smallest = min(stage_base.items(), key=lambda x: x[1])
+            plan_c = calc.plan_trajectory(countries)[C.TARGET_YEAR]
+            # Compute reduced stage totals for the exec summary
+            reduced_totals = {}
+            for stage, base in stage_base.items():
+                r35 = C.STAGE_REDUCTION_PROFILE[stage].get(C.TARGET_YEAR, 0)
+                reduced_totals[stage] = base * (1 - r35)
+            big_red = max(
+                ((k, (1 - reduced_totals[k] / stage_base[k]) * 100)
+                 for k in stage_base), key=lambda x: x[1],
+            )
+            small_red = min(
+                ((k, (1 - reduced_totals[k] / stage_base[k]) * 100)
+                 for k in stage_base), key=lambda x: x[1],
+            )
+            st.markdown(
+                f'<div class="exec-summary">'
+                f'<b>Mapped baseline:</b> {total:,.1f} tCO₂e<br>'
+                f'<b>{C.TARGET_YEAR} plan:</b> {plan_c:,.1f} tCO₂e '
+                f'({plan_c/total*100:.1f}% of baseline)<br>'
+                f'<b>Largest stage:</b> {biggest[0]}<br>'
+                f'&nbsp;&nbsp;{biggest[1]:,.1f} tCO₂e baseline<br>'
+                f'<b>Deepest reduction:</b> {big_red[0]}<br>'
+                f'&nbsp;&nbsp;−{big_red[1]:.1f}% by {C.TARGET_YEAR}<br>'
+                f'<b>Shallowest reduction:</b> {small_red[0]}<br>'
+                f'&nbsp;&nbsp;−{small_red[1]:.1f}% by {C.TARGET_YEAR}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            st.caption(
+                "Stages reduce at different rates by design: energy-related stages "
+                "move faster, material and logistics stages slower."
+            )
+
+        elif tab in ("Circular fit-out redesign", "VM & seasonal reuse",
+                     "Energy & refrigerants", "Waste & packaging", "Logistics optimization"):
+            key_map = {
+                "Circular fit-out redesign": ("fitout_countries", "fitout_driver_pick",
+                    ["Circular fit-out redesign", "Modular & adaptable design", "Asset longevity & retention"]),
+                "VM & seasonal reuse": ("vm_countries", None, ["VM & seasonal reuse"]),
+                "Energy & refrigerants": ("energy_countries", "energy_driver_pick",
+                    ["Renewable electricity transition", "Energy efficiency (LED/HVAC)", "Refrigerant management"]),
+                "Waste & packaging": ("waste_countries", "waste_driver_pick",
+                    ["Waste diversion", "Packaging circularity"]),
+                "Logistics optimization": ("log_countries", None, ["Logistics optimization"]),
+            }
+            ck, dk, drivers_here = key_map[tab]
+            countries = st.session_state.get(ck, C.MARKETS) or C.MARKETS
+            active_driver = (
+                st.session_state.get(dk, drivers_here[0]) if dk else drivers_here[0]
+            )
+            cum_all = calc.cumulative_by_driver(countries)
+            cat_total = sum(cum_all.get(d, 0) for d in drivers_here)
+            total_avoided = calc.cumulative_avoided(countries)
+            cat_share = (cat_total / total_avoided * 100) if total_avoided else 0
+            drv_total = cum_all.get(active_driver, 0)
+            drv_share = (drv_total / cat_total * 100) if cat_total else 0
+
+            st.markdown(
+                f'<div class="exec-summary">'
+                f'<b>Active driver:</b> {active_driver}<br>'
+                f'<b>Driver cumulative:</b> {drv_total:,.1f} tCO₂e<br>'
+                f'<b>Driver share of category:</b> {drv_share:.1f}%<br>'
+                f'<b>Category cumulative:</b> {cat_total:,.1f} tCO₂e<br>'
+                f'<b>Category share of portfolio avoided:</b> {cat_share:.1f}%<br>'
+                f'<b>Drivers in category:</b> {len(drivers_here)}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            st.caption(
+                "Category totals reconcile to the Overview pie chart. "
+                "Switching driver or market updates these figures."
+            )
+
+        elif tab == "Data Quality":
+            st.markdown(
+                '<div class="exec-summary">'
+                '<b>Current data tier:</b> Tier 3 (modeled)<br>'
+                '<b>Categories tracked:</b> 7<br>'
+                '<b>Markets covered:</b> 4<br>'
+                '<b>Landlord-supplied energy:</b> not included yet'
+                '</div>',
                 unsafe_allow_html=True,
             )
 
-    elif st.session_state.active_tab == "LCA Index":
-        total_stage = sum(C.LCA_STAGES.values())
-        biggest = max(C.LCA_STAGES.items(), key=lambda x: x[1])
-        smallest = min(C.LCA_STAGES.items(), key=lambda x: x[1])
-        st.markdown(
-            f'<div class="exec-summary">'
-            f'<b>Mapped baseline:</b> {total_stage:,.1f} tCO₂e<br>'
-            f'<b>Value-chain stages:</b> {len(C.LCA_STAGES)} LCA · {len(VALUE_CHAIN)} broad<br>'
-            f'<b>Largest stage:</b> {biggest[0]} ({biggest[1]:,.1f})<br>'
-            f'<b>Smallest stage:</b> {smallest[0]} ({smallest[1]:,.1f})<br>'
-            f'<b>{C.TARGET_YEAR} plan:</b> {plan_v:,.1f} tCO₂e '
-            f'({plan_v / total_stage * 100:.1f}% of baseline)'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
+        elif tab == "Method":
+            st.caption(
+                "Method tab documents boundary rules, definitions, glossaries, "
+                "and LCA methodology."
+            )
+
+        st.markdown("---")
+        st.markdown("**Baseline framework**")
         st.caption(
-            "This tab maps the full value chain and shows how each broad stage is expected "
-            "to contract by 2035. Stage footprints reconcile to the Overview baseline."
+            f"1.5°C-aligned retail pathway  \n"
+            f"Base year {C.BASELINE_YEAR}  \n"
+            f"−50% by 2030 · −70% by {C.TARGET_YEAR} · −90% by {C.LONG_TERM_YEAR}"
         )
-
-    elif st.session_state.active_tab in (
-        "Circular fit-out redesign", "VM & seasonal reuse", "Energy & refrigerants",
-        "Waste & packaging", "Logistics optimization",
-    ):
-        # Category-level exec summary
-        cat_driver_map = {
-            "Circular fit-out redesign": ["Circular fit-out redesign", "Modular & adaptable design", "Asset longevity & retention"],
-            "VM & seasonal reuse": ["VM & seasonal reuse"],
-            "Energy & refrigerants": ["Renewable electricity transition", "Energy efficiency (LED/HVAC)", "Refrigerant management"],
-            "Waste & packaging": ["Waste diversion", "Packaging circularity"],
-            "Logistics optimization": ["Logistics optimization"],
-        }
-        drivers_here = cat_driver_map[st.session_state.active_tab]
-        cat_total_cum = sum(all_cum.get(d, 0.0) for d in drivers_here)
-        cat_share = cat_total_cum / all_cum_avoided * 100 if all_cum_avoided else 0.0
-        top_drv_here = max(
-            ((d, all_cum.get(d, 0.0)) for d in drivers_here),
-            key=lambda x: x[1],
-        )
-        st.markdown(
-            f'<div class="exec-summary">'
-            f'<b>Category cumulative to 2035:</b> {cat_total_cum:,.1f} tCO₂e<br>'
-            f'<b>Share of total avoided:</b> {cat_share:.1f}%<br>'
-            f'<b>Top driver in category:</b> {top_drv_here[0]} ({top_drv_here[1]:,.1f})<br>'
-            f'<b>Drivers covered:</b> {len(drivers_here)}'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown("---")
+        st.markdown("**Data status**")
         st.caption(
-            "Category totals reconcile to the Overview pie chart. "
-            "Use the driver selector on the tab to see each driver's opportunity matrix."
+            "All figures Tier 3 modeled estimates from public benchmarks. "
+            "Not assurance-ready. Not for external reporting."
         )
 
-    else:
-        st.caption("See the tab for detail on data quality and methodology.")
-
-    st.markdown("---")
-    st.markdown("**Baseline framework**")
-    st.caption(
-        f"1.5°C-aligned retail pathway  \n"
-        f"Base year {C.BASELINE_YEAR}  \n"
-        f"−50% by 2030 · −70% by {C.TARGET_YEAR} · −90% by {C.LONG_TERM_YEAR}"
-    )
-    st.markdown("---")
-    st.markdown("**Data status**")
-    st.caption(
-        "All figures Tier 3 modeled estimates from public benchmarks. "
-        "Not assurance-ready. Not for external reporting."
-    )
 
 # ============================================================
 # TAB 1 — OVERVIEW
@@ -340,8 +370,8 @@ with tabs[0]:
     st.session_state.active_tab = "Overview"
     st.subheader("Absolute emissions trajectory, 2021–2035")
     st.caption(
-        "Switch between three views. Click a bar in the Trajectory view "
-        "to jump to monthly detail for that year."
+        "Switch between three views. Click a bar in the Trajectory view to drill into "
+        "monthly detail. All views respect the country filter."
     )
 
     country_filter = st.multiselect(
@@ -444,9 +474,8 @@ with tabs[0]:
         st.markdown("### Cumulative CO₂ avoided by driver, 2021–2035")
         st.caption(
             "Each band shows how much a driver has accumulated toward the cumulative total. "
-            "**Phasing:** energy-efficiency retrofit dominates early years (2022–2025); "
-            "circular fit-out and renewable electricity build through the middle (2025–2029); "
-            "logistics and modular design take over late (2030–2035)."
+            "The phase changes tell the story: energy retrofit early, circular fit-out mid, "
+            "logistics and modular late."
         )
 
         cum_by_driver_year = {}
@@ -483,10 +512,8 @@ with tabs[0]:
         fig_cum.update_layout(
             height=540,
             xaxis=dict(title="Year", tickmode="linear", dtick=1, gridcolor=P["grid"]),
-            yaxis=dict(
-                title="Cumulative CO₂ avoided (tCO₂e)",
-                gridcolor=P["grid"], tickformat=".1f",
-            ),
+            yaxis=dict(title="Cumulative CO₂ avoided (tCO₂e)",
+                       gridcolor=P["grid"], tickformat=".1f"),
             showlegend=True,
             legend=dict(orientation="h", y=-0.20, x=0, font=dict(size=10)),
             hovermode="x unified",
@@ -495,9 +522,9 @@ with tabs[0]:
         )
         _safe_plotly(fig_cum, key="ov_cum", selection=False)
 
-        total_at_2035 = sum(total_per_driver.values())
         st.caption(
-            f"Cumulative total 2021–{C.TARGET_YEAR}: **{total_at_2035:,.1f} tCO₂e**. "
+            f"Cumulative total 2021–{C.TARGET_YEAR}: "
+            f"**{sum(total_per_driver.values()):,.1f} tCO₂e**. "
             f"Matches the 'Cumulative CO₂ avoided' metric in the sidebar."
         )
 
@@ -558,16 +585,13 @@ with tabs[0]:
                     xaxis=dict(title=""),
                     yaxis=dict(title="tCO₂e / month", gridcolor=P["grid"], tickformat=".1f"),
                     yaxis2=dict(
-                        title="Cumulative tCO₂e",
-                        overlaying="y", side="right", showgrid=False, tickformat=".1f",
+                        title="Cumulative tCO₂e", overlaying="y", side="right",
+                        showgrid=False, tickformat=".1f",
                     ),
                     plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                     margin=dict(t=20, b=100, l=10, r=10), bargap=0.20,
                 )
                 _safe_plotly(fig_m, key="ov_monthly", selection=False)
-                st.caption(
-                    "Legend below the chart · Dotted line (right axis) = cumulative reduction across the year."
-                )
 
                 year_drv = calc.year_drivers(detail_year, country_filter)
                 ydf = pd.DataFrame(
@@ -612,8 +636,7 @@ with tabs[0]:
         textposition="outside",
         textfont=dict(size=11, color=P["ink"]),
         hovertemplate="<b>%{label}</b><br>%{value:,.1f} tCO₂e (%{percent})<extra></extra>",
-        sort=False,
-        direction="clockwise",
+        sort=False, direction="clockwise",
     )])
     fig_p.update_layout(
         height=640, showlegend=False,
@@ -666,8 +689,7 @@ with tabs[0]:
         )
 
         drill_horizon = st.radio(
-            "Drill-down horizon",
-            ["Cumulative 2021–2035", "Single year"],
+            "Drill-down horizon", ["Cumulative 2021–2035", "Single year"],
             horizontal=True, key="drill_horizon",
         )
 
@@ -686,16 +708,8 @@ with tabs[0]:
             f"Total: **{dd['total']:,.1f} tCO₂e**"
         )
 
-        if drill_horizon == "Cumulative 2021–2035":
-            pie_slice_value = cum.get(selected_driver, 0)
-            st.caption(
-                f"↳ Matches pie chart slice value ({pie_slice_value:,.1f} tCO₂e)."
-            )
-
         if dd['total'] == 0:
-            st.warning(
-                f"No reductions modeled for **{selected_driver}** in {horizon_label}."
-            )
+            st.warning(f"No reductions modeled for **{selected_driver}** in {horizon_label}.")
         else:
             ap_weights = C.ACTION_PLANS.get(selected_driver, {})
             if ap_weights:
@@ -708,8 +722,7 @@ with tabs[0]:
                 fig_ap = px.bar(ap_df, x="tCO2e", y="Strategy", orientation="h")
                 fig_ap.update_traces(
                     text=ap_df["tCO2e"].round(1),
-                    texttemplate="%{text:,.1f}",
-                    textposition="outside",
+                    texttemplate="%{text:,.1f}", textposition="outside",
                     marker_color=C.DRIVER_COLORS.get(selected_driver, P["oxblood"]),
                     hovertemplate="<b>%{y}</b><br>%{x:,.1f} tCO₂e<br>%{customdata:.1f}% of driver<extra></extra>",
                     customdata=ap_df["Share %"].round(1).tolist(),
@@ -727,12 +740,9 @@ with tabs[0]:
             st.markdown(f"#### Geographic and area splits · {horizon_label}")
             c3, c4 = st.columns(2)
             with c3:
-                st.markdown("**Country**")
                 cdf = pd.DataFrame(
-                    sorted(
-                        [(k, v["total"]) for k, v in dd["countries"].items()],
-                        key=lambda x: -x[1],
-                    ),
+                    sorted([(k, v["total"]) for k, v in dd["countries"].items()],
+                           key=lambda x: -x[1]),
                     columns=["Country", "tCO2e"],
                 )
                 fig_c = px.bar(cdf, x="tCO2e", y="Country", orientation="h", text_auto=".1f")
@@ -745,10 +755,9 @@ with tabs[0]:
                     margin=dict(t=10, b=10, l=10, r=10),
                 )
                 st.plotly_chart(fig_c, use_container_width=True, key="dd_country")
-                st.caption(f"Sum: {cdf['tCO2e'].sum():,.1f} tCO₂e")
+                st.caption(f"Country split · sum: {cdf['tCO2e'].sum():,.1f} tCO₂e")
 
             with c4:
-                st.markdown("**Area of activity**")
                 area_totals = {}
                 for c, v in dd["countries"].items():
                     for a, av in v["areas"].items():
@@ -767,42 +776,7 @@ with tabs[0]:
                     margin=dict(t=10, b=10, l=10, r=10),
                 )
                 st.plotly_chart(fig_a, use_container_width=True, key="dd_area")
-                st.caption(f"Sum: {adf['tCO2e'].sum():,.1f} tCO₂e")
-
-            st.markdown("#### Specific items")
-            rows = []
-            for c, v in dd["countries"].items():
-                for a, av in v["areas"].items():
-                    for item, iv in av["items"].items():
-                        rows.append({
-                            "Country": c, "Area of activity": a,
-                            "Specific item": item, "tCO₂e": round(iv, 1),
-                        })
-            idf = pd.DataFrame(rows)
-            if not idf.empty:
-                f1, f2 = st.columns(2)
-                with f1:
-                    cf = st.selectbox(
-                        "Filter by country",
-                        ["All"] + sorted(idf["Country"].unique().tolist()),
-                        key="item_cf",
-                    )
-                with f2:
-                    af = st.selectbox(
-                        "Filter by area of activity",
-                        ["All"] + sorted(idf["Area of activity"].unique().tolist()),
-                        key="item_af",
-                    )
-                filtered = idf.copy()
-                if cf != "All":
-                    filtered = filtered[filtered["Country"] == cf]
-                if af != "All":
-                    filtered = filtered[filtered["Area of activity"] == af]
-                filtered = filtered.sort_values("tCO₂e", ascending=False).reset_index(drop=True)
-                st.dataframe(filtered, use_container_width=True, hide_index=True)
-                st.caption(
-                    f"Showing {len(filtered)} of {len(idf)} items · click column headers to re-sort"
-                )
+                st.caption(f"Area split · sum: {adf['tCO2e'].sum():,.1f} tCO₂e")
     else:
         st.info(
             "Click a slice of the pie (or use the selector above) to drill into "
@@ -811,47 +785,47 @@ with tabs[0]:
 
 
 # ============================================================
-# TAB 2 — LCA INDEX (value-chain mapped)
+# TAB 2 — LCA INDEX
 # ============================================================
 with tabs[1]:
     st.session_state.active_tab = "LCA Index"
     st.subheader("End-to-end lifecycle and value chain")
     st.caption(
-        "The full operational value chain, mapped from design through end of life. "
-        "Each stage shows baseline footprint and planned reduction by 2035, reconciled "
-        "to the Overview baseline and plan."
+        "The full value chain from design through end of life. Each stage shows baseline, "
+        "planned reduction by 2035, and the drivers that act on it."
     )
 
-    lca_country_filter = st.multiselect(
-        "Markets in scope (LCA view)",
-        options=C.MARKETS, default=C.MARKETS,
+    lca_countries = st.multiselect(
+        "Markets in scope (LCA view)", options=C.MARKETS, default=C.MARKETS,
         key="lca_countries",
     ) or C.MARKETS
-    cov = calc.coverage_factor(lca_country_filter)
+    cov = calc.coverage_factor(lca_countries)
 
-    # Compute stage baselines at current coverage
     stage_base = {k: v * cov for k, v in C.LCA_STAGES.items()}
     total_base = sum(stage_base.values())
 
-    # Compute the 2035 plan at coverage to determine total contraction
-    plan_local = calc.plan_trajectory(lca_country_filter)
-    plan_2035 = plan_local[C.TARGET_YEAR]
-    contraction_ratio = plan_2035 / total_base if total_base else 0.0
+    # Compute reduced stage at 2035 from stage profile
+    stage_2035 = {}
+    for stage, base in stage_base.items():
+        r35 = C.STAGE_REDUCTION_PROFILE[stage].get(C.TARGET_YEAR, 0.0)
+        stage_2035[stage] = base * (1 - r35)
+    total_2035 = sum(stage_2035.values())
 
-    # Allocate plan contraction to stages proportional to stage baseline
-    stage_plan_2035 = {k: v * contraction_ratio for k, v in stage_base.items()}
-
-    # ---------------- Value-chain ribbon ----------------
     st.markdown("### Value-chain stages")
     ribbon_cols = st.columns(len(VALUE_CHAIN))
     for i, stage in enumerate(VALUE_CHAIN):
         stage_em = sum(stage_base.get(s, 0.0) for s in stage["lca_stages"])
-        stage_plan = sum(stage_plan_2035.get(s, 0.0) for s in stage["lca_stages"])
-        reduction_pct_stage = (
-            (1 - stage_plan / stage_em) * 100 if stage_em else 0.0
-        )
-        stage_drivers = ", ".join(stage["drivers"][:2]) + (
-            " + others" if len(stage["drivers"]) > 2 else ""
+        stage_pl = sum(stage_2035.get(s, 0.0) for s in stage["lca_stages"])
+        reduction_pct_stage = (1 - stage_pl / stage_em) * 100 if stage_em else 0.0
+        # Which drivers touch this stage, with their tCO2e baseline component
+        stage_drivers = []
+        for lca in stage["lca_stages"]:
+            for drv, share in C.DRIVER_SHARE_WITHIN_STAGE.get(lca, {}).items():
+                contribution = stage_base[lca] * share
+                stage_drivers.append((drv, contribution))
+        stage_drivers.sort(key=lambda x: -x[1])
+        driver_html = "<br>".join(
+            f"· <b>{d}</b> — {v:,.1f} tCO₂e" for d, v in stage_drivers[:3]
         )
         with ribbon_cols[i]:
             st.markdown(
@@ -859,44 +833,43 @@ with tabs[1]:
                 f'<div class="title">{stage["title"]}</div>'
                 f'<div class="desc">{stage["desc"]}</div>'
                 f'<div class="metric">{stage_em:,.1f} tCO₂e</div>'
-                f'<div class="sub">baseline · planned 2035: {stage_plan:,.1f} '
+                f'<div class="sub">baseline · planned 2035: {stage_pl:,.1f} '
                 f'(−{reduction_pct_stage:.1f}%)</div>'
-                f'<div class="driver">Drivers: {stage_drivers}</div>'
+                f'<div class="driver">Drivers acting here:<br>{driver_html}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
 
     st.caption(
-        f"Stage baselines sum to **{total_base:,.1f} tCO₂e**, matching the "
-        f"{C.TARGET_YEAR} baseline on the Overview tab. Planned 2035 stage totals "
-        f"sum to **{sum(stage_plan_2035.values()):,.1f} tCO₂e**, matching the plan "
-        f"anchor on the Overview tab."
+        f"Stage baselines sum to **{total_base:,.1f} tCO₂e** — the "
+        f"{C.BASELINE_YEAR} baseline on the Overview tab. Planned 2035 stage totals "
+        f"sum to **{total_2035:,.1f} tCO₂e** — the plan anchor on the Overview tab. "
+        f"Reductions differ per stage (e.g. energy fast, materials slower), which is "
+        f"why the combined reduction is not uniformly 80%."
     )
 
-    # ---------------- Baseline vs plan by stage ----------------
-    st.markdown("### Baseline → 2035 plan by LCA stage")
+    # ---------------- Baseline vs 2035 by LCA stage ----------------
+    st.markdown("### Baseline → 2035 by LCA stage")
     vc_rows = []
-    for stage in VALUE_CHAIN:
-        for lca in stage["lca_stages"]:
-            vc_rows.append({
-                "Value chain": stage["title"],
-                "LCA stage": lca,
-                "Baseline (tCO₂e)": stage_base[lca],
-                "2035 plan (tCO₂e)": stage_plan_2035[lca],
-                "Reduction (tCO₂e)": stage_base[lca] - stage_plan_2035[lca],
-            })
+    for lca, base in stage_base.items():
+        vc_rows.append({
+            "LCA stage": lca,
+            "Baseline (tCO₂e)": round(base, 1),
+            "2035 (tCO₂e)": round(stage_2035[lca], 1),
+            "Reduction %": round((1 - stage_2035[lca] / base) * 100, 1) if base else 0,
+        })
     vc_df = pd.DataFrame(vc_rows)
 
     fig_vc = go.Figure()
     fig_vc.add_trace(go.Bar(
         name="Baseline", x=vc_df["LCA stage"], y=vc_df["Baseline (tCO₂e)"],
         marker_color=P["sage"],
-        hovertemplate="<b>%{x}</b><br>Baseline: %{y:,.1f} tCO₂e<extra></extra>",
+        hovertemplate="<b>%{x}</b><br>Baseline: %{y:,.1f}<extra></extra>",
     ))
     fig_vc.add_trace(go.Bar(
-        name="2035 plan", x=vc_df["LCA stage"], y=vc_df["2035 plan (tCO₂e)"],
+        name="2035 plan", x=vc_df["LCA stage"], y=vc_df["2035 (tCO₂e)"],
         marker_color=P["gold"],
-        hovertemplate="<b>%{x}</b><br>2035: %{y:,.1f} tCO₂e<extra></extra>",
+        hovertemplate="<b>%{x}</b><br>2035: %{y:,.1f}<extra></extra>",
     ))
     fig_vc.update_layout(
         height=460, barmode="group",
@@ -908,94 +881,108 @@ with tabs[1]:
     )
     st.plotly_chart(fig_vc, use_container_width=True, key="lca_stage_bars")
 
-    # ---------------- Methodology ----------------
+    # ---------------- Stage-driver linkage chart ----------------
+    st.markdown("### Driver contribution inside each LCA stage (baseline)")
+    link_rows = []
+    for lca, base in stage_base.items():
+        for drv, share in C.DRIVER_SHARE_WITHIN_STAGE.get(lca, {}).items():
+            link_rows.append({
+                "LCA stage": lca,
+                "Driver": drv,
+                "Baseline share (tCO₂e)": round(base * share, 1),
+            })
+    link_df = pd.DataFrame(link_rows)
+    fig_link = px.bar(
+        link_df, x="Baseline share (tCO₂e)", y="LCA stage", color="Driver",
+        orientation="h", color_discrete_map=C.DRIVER_COLORS,
+        text_auto=".1f",
+    )
+    fig_link.update_layout(
+        height=460,
+        xaxis=dict(title="tCO₂e at baseline", gridcolor=P["grid"], tickformat=".1f"),
+        yaxis=dict(title="", categoryorder="total ascending"),
+        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+        legend=dict(orientation="v", x=1.02, y=0.5, font=dict(size=10)),
+        margin=dict(t=20, b=40, l=10, r=160),
+    )
+    st.plotly_chart(fig_link, use_container_width=True, key="lca_stage_driver_link")
+
+    # ---------------- Methodology (expanders) ----------------
     st.markdown("### Methodology — how each LCA stage is calculated")
     methodology = {
         "Raw material extraction": (
-            "Cradle-to-gate extraction emissions for materials entering the store: "
-            "timber, metal, stone, glass, acrylic, textiles. Sourced from supplier EPDs "
-            "where available (Tier 1), spend-based estimates from procurement otherwise (Tier 2), "
-            "and industry-average material intensities as fallback (Tier 3). "
-            "This stage anchors the design-side lever: material choice and design-for-disassembly "
-            "determine the extraction footprint of every renovation cycle."
+            "**Data:** Supplier EPDs where available (Tier 1); spend-based procurement "
+            "estimates otherwise (Tier 2); industry-average material intensities as "
+            "fallback (Tier 3). **Calculation:** Mass of each material (timber, metal, "
+            "stone, glass, acrylic, textile) × material-specific cradle-to-gate emission "
+            "factor. **Drivers:** design-for-disassembly and material choice in "
+            "Circular fit-out redesign determine the extraction footprint of every renovation."
         ),
         "Manufacturing / production": (
-            "Cradle-to-gate manufacturing emissions for fixtures, furniture, mannequins, and "
-            "packaging. BoQ mass × material-specific emission factors, annualized over the "
-            "renovation cycle. Attributed across drivers: circular fit-out (material substitution, "
-            "recycled content), modular design (fewer bespoke components), asset longevity "
-            "(refurbishment instead of replacement), packaging (mass reduction), and VM reuse "
-            "(fewer new assets)."
+            "**Data:** BoQ mass × material-specific emission factors; annualized over the "
+            "renovation cycle. **Calculation:** Σ (component mass × fabrication factor) "
+            "for fixtures, furniture, mannequins, and packaging. **Drivers:** Circular "
+            "fit-out (material substitution, recycled content), modular design (fewer "
+            "bespoke components), asset longevity (refurbishment vs replacement), "
+            "packaging (mass reduction), VM reuse (fewer new assets)."
         ),
         "Transport & distribution": (
-            "Upstream freight of fixtures, materials, and products to stores plus store-to-store "
-            "transfers and reverse logistics. Calculated as tonne-km × mode-specific emission factors "
-            "(sea, road, air). Driver: logistics optimization — modal shift, consolidation, "
-            "and reverse-logistics network redesign."
+            "**Data:** Freight logs or logistics partner data (Tier 1); spend-based "
+            "estimates on logistics cost (Tier 2). **Calculation:** Tonne-km × mode-specific "
+            "emission factor (sea, road, air). **Driver:** logistics optimization — modal "
+            "shift, consolidation, reverse-logistics network redesign."
         ),
         "Store fit-out & construction": (
-            "Site-stage emissions from installation and renovation activities: "
-            "construction waste, on-site energy, packaging disposal. Scope 3 Cat 5 waste "
-            "at installation. Attributed to waste diversion (segregation at source), "
-            "asset longevity (installation with retention in mind)."
+            "**Data:** Bill of Quantities with material masses (Tier 1); capex by project "
+            "type (Tier 2); per-m² benchmark (Tier 3). **Calculation:** Σ (material mass × "
+            "cradle-to-gate EF) + construction waste (Scope 3 Cat 5). **Drivers:** circular "
+            "fit-out redesign and modular & adaptable design — the two determinant levers."
         ),
         "Operations (energy & refrigerants)": (
-            "Scope 1+2 emissions while the store is trading: purchased electricity × grid "
-            "factor (location-based for this draft), plus refrigerant top-up × GWP. "
-            "Drivers: renewable electricity transition (PPAs, RECs), energy efficiency "
-            "(LED, HVAC), and refrigerant management (leak reduction, low-GWP). "
-            "Location-based only in this draft; market-based will replace when RE certificates are tracked."
+            "**Data:** Utility invoices (Tier 1); floor-area allocation from landlord data "
+            "(Tier 2); kWh/m² benchmark × grid factor (Tier 3). **Calculation:** "
+            "kWh × grid emission factor (location-based) + refrigerant top-up (kg) × GWP. "
+            "**Drivers:** renewable electricity transition, energy efficiency, refrigerant management."
         ),
         "Seasonal / VM refresh": (
-            "Emissions from seasonal builds, props, mannequins, display kits, and graphics. "
-            "Calculated as kgCO₂e per m² of selling area per year, split across window displays, "
-            "mannequins, in-store installations, and signage. Attributed to VM & seasonal reuse."
+            "**Data:** VM procurement records (Tier 1); estimated kgCO₂e per m² of selling "
+            "area (Tier 3). **Calculation:** selling area (70% of GIA) × VM intensity, split "
+            "across window displays, mannequins, in-store installations, signage. "
+            "**Driver:** VM & seasonal reuse."
         ),
         "Maintenance & repair": (
-            "Emissions from refurbishment and repair of fixtures and VM assets — "
-            "reupholstery, refinishing, spare parts. Attributed to asset longevity & retention. "
-            "Lower footprint than replacement, but not zero; captured here rather than as avoided."
+            "**Data:** Maintenance log (Tier 1); estimated from refurbishment frequency "
+            "(Tier 3). **Calculation:** Σ (refurb/repair events × avg embodied carbon avoided "
+            "vs replacement). **Driver:** asset longevity & retention."
         ),
         "End of life (waste, take-back)": (
-            "Waste generated in operations (Scope 3 Cat 5) plus end-of-life treatment of sold "
-            "products and packaging (Category 12). Mass × treatment-specific emission factors "
-            "(landfill, incineration, recycling, reuse). Attributed to waste diversion and "
-            "packaging circularity."
+            "**Data:** Waste contractor manifests (Tier 1); estimated waste mass by area "
+            "(Tier 3). **Calculation:** Mass × treatment-specific EF (landfill, incineration, "
+            "recycling, reuse) for Scope 3 Cat 5 (own waste) and Cat 12 (sold products). "
+            "**Driver:** waste diversion."
         ),
     }
-    methodology_df = pd.DataFrame([
-        {"LCA stage": k, "Calculation basis": v}
-        for k, v in methodology.items()
-    ])
-    st.dataframe(methodology_df, use_container_width=True, hide_index=True)
+    for stage, text in methodology.items():
+        with st.expander(f"{stage} — calculation basis"):
+            st.markdown(text)
 
     st.divider()
     st.subheader("LCA stages — detailed footprint")
-    lca_df = pd.DataFrame({
-        "Stage": list(stage_base.keys()),
-        "Baseline (tCO₂e)": [round(v, 1) for v in stage_base.values()],
-        "2035 plan (tCO₂e)": [round(stage_plan_2035[k], 1) for k in stage_base.keys()],
-    })
-    lca_df["Reduction %"] = (
-        (1 - lca_df["2035 plan (tCO₂e)"] / lca_df["Baseline (tCO₂e)"]) * 100
-    ).round(1)
-    st.dataframe(lca_df, use_container_width=True, hide_index=True)
+    st.dataframe(vc_df, use_container_width=True, hide_index=True)
 
     colA, colB = st.columns(2)
     with colA:
         fig_t = px.treemap(
-            lca_df, path=["Stage"], values="Baseline (tCO₂e)",
+            vc_df, path=["LCA stage"], values="Baseline (tCO₂e)",
             color="Baseline (tCO₂e)",
             color_continuous_scale=[[0, "#EFEAE0"], [1, P["sage"]]],
         )
-        fig_t.update_layout(
-            height=420, title="Baseline footprint share",
-            paper_bgcolor="rgba(0,0,0,0)",
-        )
+        fig_t.update_layout(height=420, title="Baseline footprint share",
+                            paper_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig_t, use_container_width=True, key="lca_tree")
     with colB:
         fig_r = px.bar(
-            lca_df, x="Stage", y="Reduction %",
+            vc_df, x="LCA stage", y="Reduction %",
             color="Reduction %",
             color_continuous_scale=[[0, "#EFEAE0"], [1, P["sage"]]],
         )
@@ -1013,26 +1000,30 @@ with tabs[1]:
 # ============================================================
 # Opportunity + Gantt helper
 # ============================================================
-def _initiative_gantt(opportunities, key_suffix):
-    """Renders a Gantt-style view of initiatives over 2021-2035."""
-    # Assign realistic start years based on status
+def _initiative_gantt(opportunities, country_filter, key_suffix):
+    """Gantt of initiatives with per-country timing offsets."""
+    # Use the earliest offset among selected markets (China is -1, HK/SG +1)
+    offsets = [C.COUNTRY_ROLLOUT_LAG.get(c, 0) for c in country_filter]
+    chosen_offset = min(offsets) if offsets else 0
+    offset_label = ", ".join(
+        f"{c}: {C.COUNTRY_ROLLOUT_LAG.get(c, 0):+d}y" for c in country_filter
+    )
+
     opp_rows = []
-    for name, impact, effort, status in opportunities:
-        if status == "Acted":
-            start, end = 2022, 2030
-        elif status == "In progress":
-            start, end = 2024, 2032
-        else:
-            start, end = 2026, 2035
-        years_active = end - start + 1
-        annual = impact / years_active if years_active else 0.0
+    for name, impact, effort, status, start, end in opportunities:
+        start_c = max(C.BASELINE_YEAR, start + chosen_offset)
+        end_c = min(C.TARGET_YEAR, end + chosen_offset)
+        if end_c < start_c:
+            end_c = start_c
+        duration = end_c - start_c + 1
+        annual = impact / duration if duration else 0.0
         opp_rows.append({
             "Initiative": name,
             "Status": status,
             "Effort": effort,
-            "Start": start,
-            "End": end,
-            "Duration (yrs)": years_active,
+            "Start": start_c,
+            "End": end_c,
+            "Duration (yrs)": duration,
             "Total impact (tCO₂e)": impact,
             "Annual impact (tCO₂e/yr)": annual,
         })
@@ -1047,16 +1038,14 @@ def _initiative_gantt(opportunities, key_suffix):
         fig.add_trace(go.Bar(
             x=[row["Duration (yrs)"]],
             y=[row["Initiative"]],
-            base=[row["Start"] - 2021],
+            base=[row["Start"] - C.BASELINE_YEAR],
             orientation="h",
-            marker=dict(
-                color=status_colors[row["Status"]],
-                line=dict(color="white", width=1),
-            ),
+            marker=dict(color=status_colors[row["Status"]],
+                        line=dict(color="white", width=1)),
             text=f"{int(row['Start'])}–{int(row['End'])} · {row['Annual impact (tCO₂e/yr)']:.1f}/yr",
             textposition="inside",
             insidetextanchor="middle",
-            textfont=dict(color="white", size=10),
+            textfont=dict(color="white", size=9),
             hovertemplate=(
                 f"<b>{row['Initiative']}</b><br>"
                 f"Status: {row['Status']}<br>"
@@ -1064,21 +1053,19 @@ def _initiative_gantt(opportunities, key_suffix):
                 f"Active: {int(row['Start'])}–{int(row['End'])} "
                 f"({int(row['Duration (yrs)'])} yrs)<br>"
                 f"Total impact: {row['Total impact (tCO₂e)']:,.1f} tCO₂e<br>"
-                f"Annual impact: {row['Annual impact (tCO₂e/yr)']:,.1f} tCO₂e/yr"
-                "<extra></extra>"
+                f"Annual: {row['Annual impact (tCO₂e/yr)']:,.1f} tCO₂e/yr<extra></extra>"
             ),
             showlegend=False,
         ))
-
     fig.update_layout(
         height=max(340, 60 + 42 * len(gdf)),
         barmode="stack",
         xaxis=dict(
             title="Year",
-            range=[0, 15],
+            range=[0, C.TARGET_YEAR - C.BASELINE_YEAR],
             tickmode="array",
-            tickvals=[i for i in range(0, 15, 1)],
-            ticktext=[str(2021 + i) for i in range(0, 15, 1)],
+            tickvals=[i for i in range(0, C.TARGET_YEAR - C.BASELINE_YEAR + 1)],
+            ticktext=[str(C.BASELINE_YEAR + i) for i in range(0, C.TARGET_YEAR - C.BASELINE_YEAR + 1)],
             gridcolor=P["grid"],
         ),
         yaxis=dict(title="", categoryorder="array",
@@ -1088,7 +1075,6 @@ def _initiative_gantt(opportunities, key_suffix):
     )
     st.plotly_chart(fig, use_container_width=True, key=f"gantt_{key_suffix}")
 
-    # Status legend as chips
     chips = " ".join(
         f'<span style="background:{status_colors[s]};color:white;'
         f'padding:3px 10px;border-radius:2px;font-size:0.78rem;margin-right:6px;">'
@@ -1097,56 +1083,45 @@ def _initiative_gantt(opportunities, key_suffix):
     )
     st.markdown(chips, unsafe_allow_html=True)
     st.caption(
-        "Bars show each initiative's active window; label reads start–end · annualised "
-        "reduction impact. Timing is modeled from status: **Acted** — deployed from 2022 and "
-        "maintained; **In progress** — from 2024; **Opportunity** — from 2026. "
-        "Impact values are cumulative reduction to 2035."
+        f"Timing shown for markets in scope (offset vs plan anchor: {offset_label}). "
+        f"Bars show each initiative's active window in the earliest-offset market in scope; "
+        f"label reads start–end · annualised reduction. Durations reflect a realistic "
+        f"ramp (retrofits quick, material substitutions slow)."
     )
-    st.dataframe(
-        gdf[["Initiative", "Status", "Effort", "Start", "End", "Duration (yrs)",
-             "Total impact (tCO₂e)", "Annual impact (tCO₂e/yr)"]].round(1),
-        use_container_width=True, hide_index=True,
-    )
-    return gdf
+    st.dataframe(gdf.round(1), use_container_width=True, hide_index=True)
 
 
 def render_opportunity_tab(opportunities, scope_area_key, title, intro, country_filter, key_suffix):
     st.subheader(title)
     st.caption(intro)
 
-    # ---------- Table 1 — Full scope of items, sortable + filterable ----------
+    # ---------- Table 1 — merged scope + subtotals, sortable + filterable ----------
     st.markdown("#### Full scope of items assessed")
+    dd_cum = DD.cumulative_drill_down(scope_area_key, country_filter)
+    driver_total = dd_cum["total"]
+
     scope_rows = []
-    driver_total_emissions = 0.0
     if scope_area_key in C.DRIVER_STRUCTURE:
-        # Estimate this driver's total cumulative emissions from the drill-down
-        dd_cum = DD.cumulative_drill_down(scope_area_key, country_filter)
-        driver_total_emissions = dd_cum["total"]
         for area_name, data in C.DRIVER_STRUCTURE[scope_area_key]["areas"].items():
             for item, w in data["weights"].items():
                 scope_rows.append({
                     "Area of activity": area_name,
                     "Specific item": item,
-                    "tCO₂e": round(driver_total_emissions * w, 1),
-                    "Share %": round(w * 100.0, 1),
+                    "tCO₂e": round(driver_total * w, 1),
                 })
     scope_df = pd.DataFrame(scope_rows)
 
     if not scope_df.empty:
-        filter_col, sort_col = st.columns([2, 2])
-        with filter_col:
-            area_filter = st.selectbox(
-                "Filter by area of activity",
-                ["All"] + sorted(scope_df["Area of activity"].unique().tolist()),
-                key=f"area_filter_{key_suffix}",
-            )
-        with sort_col:
-            sort_by = st.selectbox(
-                "Sort by",
-                ["tCO₂e (desc)", "tCO₂e (asc)", "Share % (desc)",
-                 "Area of activity (A→Z)", "Specific item (A→Z)"],
-                key=f"sort_{key_suffix}",
-            )
+        area_filter = st.selectbox(
+            "Filter by area of activity",
+            ["All"] + sorted(scope_df["Area of activity"].unique().tolist()),
+            key=f"area_filter_{key_suffix}",
+        )
+        sort_by = st.selectbox(
+            "Sort by",
+            ["tCO₂e (desc)", "tCO₂e (asc)", "Area of activity (A→Z)", "Specific item (A→Z)"],
+            key=f"sort_{key_suffix}",
+        )
 
         filtered = scope_df.copy()
         if area_filter != "All":
@@ -1155,40 +1130,41 @@ def render_opportunity_tab(opportunities, scope_area_key, title, intro, country_
         sort_map = {
             "tCO₂e (desc)": ("tCO₂e", False),
             "tCO₂e (asc)": ("tCO₂e", True),
-            "Share % (desc)": ("Share %", False),
             "Area of activity (A→Z)": ("Area of activity", True),
             "Specific item (A→Z)": ("Specific item", True),
         }
-        sort_col_name, asc = sort_map[sort_by]
-        filtered = filtered.sort_values(sort_col_name, ascending=asc).reset_index(drop=True)
+        col, asc = sort_map[sort_by]
+        filtered = filtered.sort_values(col, ascending=asc).reset_index(drop=True)
 
+        # Share % within the current view (i.e. All = 100%)
+        view_total = filtered["tCO₂e"].sum()
+        filtered["Share %"] = (filtered["tCO₂e"] / view_total * 100).round(1) if view_total else 0.0
         st.dataframe(filtered, use_container_width=True, hide_index=True)
-
-        # Subtotal row
-        subtotal_em = filtered["tCO₂e"].sum()
-        subtotal_share = filtered["Share %"].sum()
-        st.markdown(
-            f"**Subtotal — {area_filter if area_filter != 'All' else 'all areas'}:** "
-            f"{subtotal_em:,.1f} tCO₂e · {subtotal_share:.1f}% of driver total "
-            f"({driver_total_emissions:,.1f} tCO₂e)"
+        st.caption(
+            f"View total: {view_total:,.1f} tCO₂e · Share % is relative to this view "
+            f"({'all items' if area_filter == 'All' else f'items in {area_filter}'})."
         )
 
-        # By-area subtotal table
-        area_sub = scope_df.groupby("Area of activity").agg(
-            **{"tCO₂e": ("tCO₂e", "sum"), "Share %": ("Share %", "sum")}
-        ).reset_index().sort_values("tCO₂e", ascending=False)
+        # Area subtotals table (share % vs ALL driver total)
+        area_sub = scope_df.groupby("Area of activity", as_index=False)["tCO₂e"].sum()
+        area_sub["Share of driver total %"] = (
+            area_sub["tCO₂e"] / driver_total * 100
+        ).round(1) if driver_total else 0.0
+        area_sub = area_sub.sort_values("tCO₂e", ascending=False).reset_index(drop=True)
         st.markdown("**Subtotals by area of activity**")
         st.dataframe(area_sub.round(1), use_container_width=True, hide_index=True)
+        st.caption(
+            f"Driver total across all areas: {driver_total:,.1f} tCO₂e "
+            f"({C.DRIVER_SCOPES.get(scope_area_key, '')}). "
+            f"Shares sum to 100%."
+        )
 
-    # ---------- Table 2 — Gantt of initiatives ----------
-    st.markdown("#### Initiative phasing — Gantt view")
-    _initiative_gantt(opportunities, key_suffix)
-
-    # ---------- Table 3 — Effort vs impact scatter ----------
-    st.markdown("#### Initiatives matrix — effort vs impact")
+    # ---------- Table 2 — Effort vs impact (moved before Gantt) ----------
+    st.markdown("#### Initiatives overview — effort vs impact")
     opp_df = pd.DataFrame(
         opportunities,
-        columns=["Initiative", "Impact (tCO₂e by 2035)", "Effort (1–5)", "Status"],
+        columns=["Initiative", "Impact (tCO₂e by 2035)", "Effort (1–5)",
+                 "Status", "Start", "End"],
     )
     opp_df["Impact (tCO₂e by 2035)"] = opp_df["Impact (tCO₂e by 2035)"].astype(float)
 
@@ -1199,10 +1175,10 @@ def render_opportunity_tab(opportunities, scope_area_key, title, intro, country_
             opp_df, x="Effort (1–5)", y="Impact (tCO₂e by 2035)",
             size="Impact (tCO₂e by 2035)", color="Status",
             color_discrete_map=status_colors, hover_name="Initiative",
-            title="Effort vs impact",
+            title="Effort vs reduction impact",
         )
         fig.update_layout(
-            height=480, plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+            height=460, plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
             xaxis=dict(gridcolor=P["grid"]),
             yaxis=dict(gridcolor=P["grid"], tickformat=".1f"),
         )
@@ -1219,6 +1195,12 @@ def render_opportunity_tab(opportunities, scope_area_key, title, intro, country_
         for status in ["Acted", "In progress", "Opportunity"]:
             sub = opp_df[opp_df["Status"] == status]
             st.metric(status, f"{sub['Impact (tCO₂e by 2035)'].sum():,.1f} tCO₂e")
+        st.metric("Total impact to 2035",
+                  f"{opp_df['Impact (tCO₂e by 2035)'].sum():,.1f} tCO₂e")
+
+    # ---------- Table 3 — Gantt phasing ----------
+    st.markdown("#### Initiative phasing — Gantt view")
+    _initiative_gantt(opportunities, country_filter, key_suffix)
 
 
 # ============================================================
@@ -1243,7 +1225,7 @@ with tabs[2]:
     render_opportunity_tab(
         opp_map[driver_pick], driver_pick,
         f"Capital goods — {driver_pick}",
-        "Full scope of assessable items, then initiative phasing, then the effort/impact matrix.",
+        "Item scope, initiatives overview, then phasing Gantt.",
         country_filter, f"cap_{driver_pick[:6]}",
     )
     st.divider()
@@ -1274,30 +1256,9 @@ with tabs[3]:
     render_opportunity_tab(
         C.SEASONAL_OPPORTUNITIES, "VM & seasonal reuse",
         "VM & seasonal reuse",
-        "Highest-velocity carbon source. Full item scope, phasing, then effort/impact matrix.",
+        "Highest-velocity carbon source. Item scope, initiatives, then Gantt.",
         country_filter, "vm",
     )
-    st.divider()
-    st.subheader("Gross → avoided → memo net position")
-    sub = df[df["Market"].isin(country_filter)]
-    gross = sub["Seasonal/VM (tCO2e)"].sum()
-    avoid = sub["Avoided emissions (tCO2e)"].sum()
-    bridge = go.Figure(go.Waterfall(
-        x=["Gross seasonal/VM", "Avoided (reuse)", "Memo net"],
-        y=[gross, -avoid, 0],
-        measure=["absolute", "relative", "total"],
-        text=[f"{gross:,.1f}", f"-{avoid:,.1f}", f"{gross - avoid:,.1f}"],
-        decreasing={"marker": {"color": P["gold"]}},
-        increasing={"marker": {"color": P["sage"]}},
-        totals={"marker": {"color": P["green"]}},
-        connector={"line": {"color": P["grey"]}},
-    ))
-    bridge.update_layout(
-        height=380, showlegend=False,
-        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-        yaxis=dict(title="tCO₂e / yr", gridcolor=P["grid"], tickformat=".1f"),
-    )
-    st.plotly_chart(bridge, use_container_width=True, key="vm_bridge")
 
 
 # ============================================================
@@ -1322,7 +1283,7 @@ with tabs[4]:
     render_opportunity_tab(
         opp_map[driver_pick], driver_pick,
         f"Scope 1+2 — {driver_pick}",
-        "Full item scope, phasing, then effort/impact matrix.",
+        "Item scope, initiatives overview, then Gantt phasing.",
         country_filter, f"energy_{driver_pick[:6]}",
     )
     st.divider()
@@ -1339,11 +1300,9 @@ with tabs[4]:
             color_discrete_sequence=CHART_COLORS, text_auto=".1f",
             title="Scope 2 (location-based)",
         )
-        fig.update_layout(
-            showlegend=False, height=380,
-            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-            yaxis=dict(gridcolor=P["grid"], tickformat=".1f"),
-        )
+        fig.update_layout(showlegend=False, height=380,
+                          plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                          yaxis=dict(gridcolor=P["grid"], tickformat=".1f"))
         st.plotly_chart(fig, use_container_width=True, key="scope2_bar")
     with c_b:
         fig = px.bar(
@@ -1351,11 +1310,9 @@ with tabs[4]:
             color_discrete_sequence=CHART_COLORS, text_auto=".1f",
             title="Scope 1 refrigerant",
         )
-        fig.update_layout(
-            showlegend=False, height=380,
-            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-            yaxis=dict(gridcolor=P["grid"], tickformat=".1f"),
-        )
+        fig.update_layout(showlegend=False, height=380,
+                          plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                          yaxis=dict(gridcolor=P["grid"], tickformat=".1f"))
         st.plotly_chart(fig, use_container_width=True, key="scope1_bar")
 
 
@@ -1380,7 +1337,7 @@ with tabs[5]:
     render_opportunity_tab(
         opp_map[driver_pick], driver_pick,
         driver_pick,
-        "Full waste stream scope, phasing, then effort/impact matrix.",
+        "Item scope, initiatives overview, then Gantt phasing.",
         country_filter, f"waste_{driver_pick[:6]}",
     )
     st.divider()
@@ -1421,7 +1378,7 @@ with tabs[6]:
     render_opportunity_tab(
         C.LOGISTICS_OPPORTUNITIES, "Logistics optimization",
         "Logistics optimization",
-        "Full freight and reverse-logistics scope, phasing, then effort/impact matrix.",
+        "Freight and reverse-logistics scope, initiatives, then Gantt phasing.",
         country_filter, "log",
     )
 
@@ -1474,15 +1431,18 @@ with tabs[8]:
 - Avoided emissions: memo item, outside inventory boundary
 - Category 5 (store waste) and Category 12 (sold-product EoL) kept separate
 
-**Drill-down hierarchy (5 levels):** driver → activity type → country → area → item
-**Additional view:** strategy attribution (within each driver's drill-down)
+**How reductions are modelled:** each LCA stage has its own reduction curve from 2021 to 2035. 
+Driver-level reductions are derived from stage reductions × driver share within stage. 
+This ensures the driver pie, the LCA view, and the Overview trajectory all reconcile.
 
 **Metric definitions:**
 - **Reduction vs baseline (2035)** — annual snapshot vs 2021 baseline.
 - **Cumulative CO₂ avoided (2021–2035)** — integrated total of yearly avoided amounts.
 - **Impact (tCO₂e by 2035)** — cumulative reduction contribution of a specific initiative.
+- **Share % (filtered view)** — relative to the currently filtered table total.
+- **Share of driver total %** — relative to the driver's full unfiltered total.
 
-**LCA methodology summary:** see the LCA Index tab for stage-by-stage calculation basis.
+**LCA methodology summary:** see LCA Index tab for stage-by-stage calculation basis.
 """)
     st.markdown("### Scope glossary")
     for scope, definition in C.SCOPE_DEFINITIONS.items():
@@ -1497,3 +1457,6 @@ st.caption(
     "Built with Streamlit + Plotly. Free stack, public repo. "
     "All figures modeled — replace before external use."
 )
+
+# Render sidebar last so active_tab reflects current view
+render_exec_summary()
