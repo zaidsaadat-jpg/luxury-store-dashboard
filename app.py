@@ -1175,7 +1175,7 @@ def render_opportunity_tab(opportunities, scope_area_key, title, intro, country_
 
         # By-area subtotal table
         area_sub = scope_df.groupby("Area of activity").agg(
-            tCO₂e=("tCO₂e", "sum"), **{"Share %": ("Share %", "sum")}
+            **{"tCO₂e": ("tCO₂e", "sum"), "Share %": ("Share %", "sum")}
         ).reset_index().sort_values("tCO₂e", ascending=False)
         st.markdown("**Subtotals by area of activity**")
         st.dataframe(area_sub.round(1), use_container_width=True, hide_index=True)
